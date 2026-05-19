@@ -1,6 +1,6 @@
-<<<<<<< HEAD
+
 # derma-the-skincare-assistant
-=======
+
 # Skincare Assistant
 
 A conversational AI chatbot that helps users find skincare products and get skincare advice. It combines vector-based document retrieval, multi-turn conversation memory, and Google's Gemini API to provide context-aware responses.
