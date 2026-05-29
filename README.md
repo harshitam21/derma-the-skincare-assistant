@@ -13,6 +13,7 @@ The assistant leverages a curated dataset of skincare products and information, 
 1. User: "Suggest products for hyperpigmentation"
 2. User: "What about moisturisers?" → Stays in skincare/hyperpigmentation context
 3. User: "Now show cheaper options" → Remembers previous queries and applies budget filter
+<img width="1106" height="842" alt="{137BDF32-3402-47C4-BFBB-280589D4E423}" src="https://github.com/user-attachments/assets/247c70f4-8747-4ace-ae90-cb3329fe3fc6" />
 
 ## Features
 
