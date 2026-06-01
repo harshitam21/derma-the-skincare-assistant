@@ -1,344 +1,262 @@
+# Derma: The Skincare Assistant
 
-# derma-the-skincare-assistant
+A conversational skincare assistant that recommends products from a curated dataset. It uses a React chat UI, a FastAPI backend, Pinecone vector search, and Google's Gemini API for both retrieval embeddings and natural-language answers.
 
-# Skincare Assistant
+Production app: https://derma-the-skincare-assistant.vercel.app
 
-A conversational AI chatbot that helps users find skincare products and get skincare advice. It combines vector-based document retrieval, multi-turn conversation memory, and Google's Gemini API to provide context-aware responses.
+<img width="1106" height="842" alt="Skincare Assistant chat UI" src="https://github.com/user-attachments/assets/247c70f4-8747-4ace-ae90-cb3329fe3fc6" />
 
 ## Overview
 
-The assistant leverages a curated dataset of skincare products and information, enabling intelligent product recommendations based on user queries. It maintains conversation context across multiple turns, allowing users to ask follow-up questions with implicit references to previous messages (e.g., "under 10 pounds" after asking for moisturisers).
-
-**Example conversation flow:**
-1. User: "Suggest products for hyperpigmentation"
-2. User: "What about moisturisers?" → Stays in skincare/hyperpigmentation context
-3. User: "Now show cheaper options" → Remembers previous queries and applies budget filter
-<img width="1106" height="842" alt="{137BDF32-3402-47C4-BFBB-280589D4E423}" src="https://github.com/user-attachments/assets/247c70f4-8747-4ace-ae90-cb3329fe3fc6" />
+The assistant uses a curated skincare product dataset to answer product discovery questions. It keeps conversation context across turns, so follow-up prompts such as "under 10 pounds" or "show cheaper options" stay connected to the previous skincare request.
 
 ## Features
 
-- **React Chat UI** - Clean, responsive chat interface with message history
-- **FastAPI Backend** - High-performance Python backend serving both API and frontend
-- **Vector Search** - Semantic search using sentence-transformers embeddings
-- **Multi-turn Memory** - Persistent per-session conversation history with automatic context inclusion
-- **Gemini Integration** - Powered by Google's Gemini API for conversational responses
-- **Intelligent Routing** - Detects follow-up questions and maintains context automatically
-- **Session Management** - Browser-based session IDs stored in localStorage
-- **Reset Functionality** - Clear conversation memory with a single click
+- React + Vite chat interface with local chat history
+- FastAPI API served through Vercel serverless functions
+- Pinecone-backed semantic product retrieval
+- Gemini embeddings for query and document vectors
+- Gemini chat responses with retrieved product context
+- Per-session conversation memory for follow-up questions
+- Reset endpoint to clear server-side chat memory
 
 ## Architecture
 
-### Core Components
+```text
+skincare-assistant/
+|-- api/
+|   `-- index.py                  # Vercel Python entrypoint
+|-- backend/
+|   |-- main.py                   # FastAPI routes
+|   |-- chat/
+|   |   `-- chatbot.py            # Gemini response + conversation memory
+|   |-- retrieval/
+|   |   `-- search.py             # Gemini query embeddings + Pinecone search
+|   `-- embeddings/
+|       `-- embed.py              # Upload document embeddings to Pinecone
+|-- frontend/
+|   `-- src/                      # React app
+|-- data/
+|   |-- raw/                      # Source CSV files
+|   `-- processed/                # documents.json for embedding
+|-- scripts/
+|   `-- build_documents.py
+|-- requirements.txt              # Production Python dependencies
+|-- requirements-dev.txt          # Local data/test tooling
+`-- vercel.json                   # Vercel build and routing config
+```
 
-**Backend (Python + FastAPI)**
-- `main.py` - REST API server and static file serving
-- `chat/chatbot.py` - Chat logic, memory management, and Gemini integration
-- `retrieval/search.py` - Vector similarity search using embeddings
-- `embeddings/embed.py` - Script to generate embeddings from documents
+## How It Works
 
-**Frontend (React + Vite)**
-- `src/main.jsx` - React chat component with state management
-- `src/styles.css` - UI styling
-- Built to `dist/` and served by FastAPI
+1. The frontend posts a message to `/api/chat`.
+2. The backend builds a retrieval query, including recent conversation context when needed.
+3. `backend/retrieval/search.py` embeds the query with Gemini and searches Pinecone.
+4. Retrieved documents plus chat history are sent to Gemini for the final answer.
+5. The frontend stores conversations in `localStorage`; the backend keeps short in-memory session history.
 
-**Data Pipeline**
-- `data/raw/` - Source CSV files with skincare product data
-- `data/processed/documents.json` - Processed documents ready for embedding
-- `data/embeddings/embeddings.npy` - Precomputed embeddings for fast search
-- `data/cache/huggingface/` - Cached transformer models
-
-### How It Works
-
-1. **User sends a message** → Frontend sends to `/api/chat` with session ID
-2. **Backend retrieves context** → Loads conversation history from session memory
-3. **Search for relevant docs** → Encodes query and finds top-5 similar documents using cosine similarity
-4. **Generate response** → Sends documents + conversation history + user query to Gemini API
-5. **Store conversation** → Saves user message and assistant response to session memory
-6. **Return response** → Streams response back to frontend for display
-
-### Session Memory
-
-Each browser session gets a unique UUID stored in localStorage. The backend maintains per-session conversation history in memory, which includes:
-- All user messages in the current session
-- All assistant responses in the current session
-- Automatic inclusion of conversation history in every prompt (not just follow-ups)
-- Configurable history limit via `CHAT_MEMORY_TURNS` environment variable
-
-## Quick Start
-
-### Prerequisites
+## Requirements
 
 - Python 3.12+
-- Node.js 16+ and npm
-- A free [Google AI Studio](https://aistudio.google.com) account and Gemini API key
+- Node.js and npm
+- Google AI Studio API key
+- Pinecone API key
 
-### 1. Environment Setup
+## Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env` file from the template:
 
 ```bash
 cp .env.example .env
 ```
 
-Then edit `.env` and add your Gemini API key:
+Required:
 
 ```env
-GEMINI_API_KEY=your_api_key_here
+GEMINI_API_KEY=your_gemini_api_key
+PINECONE_API_KEY=your_pinecone_api_key
 ```
 
-### 2. Install Dependencies
+Common optional values:
+
+```env
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODEL=gemini-2.5-flash-lite
+GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+GEMINI_EMBEDDING_DIMENSIONS=384
+CHAT_MEMORY_TURNS=6
+
+PINECONE_INDEX_NAME=derma-skincare
+PINECONE_NAMESPACE=
+PINECONE_CLOUD=aws
+PINECONE_REGION=us-east-1
+PINECONE_METRIC=cosine
+PINECONE_UPSERT_BATCH_SIZE=100
+```
+
+The Pinecone index dimension must match `GEMINI_EMBEDDING_DIMENSIONS`.
+
+## Local Setup
+
+Install Python dependencies:
 
 ```bash
-# Python dependencies
 python -m pip install -r requirements.txt
+```
 
-# Frontend dependencies
+Install frontend dependencies and build:
+
+```bash
 cd frontend
 npm install
 npm run build
 cd ..
 ```
 
-### 3. Run the Application
+Run the FastAPI app:
 
 ```bash
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-Open your browser and navigate to:
-```
+Open:
+
+```text
 http://127.0.0.1:8000
 ```
 
-The React UI will load in your browser. You can now chat with the skincare assistant!
+## Development
 
-## API Reference
+For local frontend hot reload, run the backend and frontend separately.
 
-### Chat Endpoint
+Backend:
 
-Send a message and get a response based on conversation history and retrieved documents.
-
-```http
-POST /api/chat
-Content-Type: application/json
-
-{
-  "message": "Suggest products for hyperpigmentation",
-  "session_id": "uuid-or-custom-id"
-}
-```
-
-**Response:**
-```json
-{
-  "answer": "I'd recommend products with vitamin C or niacinamide...",
-  "session_id": "uuid-or-custom-id"
-}
-```
-
-**Parameters:**
-- `message` (required, string) - User's question or statement
-- `session_id` (optional, string) - Unique session identifier (defaults to "default")
-
----
-
-### Reset Endpoint
-
-Clear conversation history for a session.
-
-```http
-POST /api/reset
-Content-Type: application/json
-
-{
-  "session_id": "uuid-or-custom-id"
-}
-```
-
-**Response:**
-```json
-{
-  "status": "cleared",
-  "session_id": "uuid-or-custom-id"
-}
-```
-
----
-
-### Health Check
-
-Verify the API is running.
-
-```http
-GET /health
-```
-
-**Response:**
-```json
-{
-  "status": "ok"
-}
-```
-
-## Recent Updates
-
-### Conversation Memory Fix
-The chatbot now includes conversation history in **every message**, not just follow-up questions. This ensures:
-- Full context is maintained across all messages in a session
-- Follow-up questions automatically reference previous messages
-- Users don't need to repeat context
-
-**Change made:** Updated `generate_response()` in `backend/chat/chatbot.py` to always include `_format_history(memory)` in the prompt instead of conditionally based on `_is_follow_up()`.
-
-## Development & Contributions
-
-### Project Structure
-
-```
-skincare-assistant/
-├── backend/
-│   ├── main.py                    # FastAPI app + routing
-│   ├── chat/
-│   │   └── chatbot.py             # Core chat logic + memory
-│   ├── retrieval/
-│   │   └── search.py              # Vector search
-│   └── embeddings/
-│       └── embed.py               # Embedding generation
-├── frontend/
-│   ├── src/
-│   │   ├── main.jsx               # React app
-│   │   └── styles.css             # Styling
-│   └── dist/                      # Built output
-├── data/
-│   ├── raw/                       # Source CSV files
-│   ├── processed/
-│   │   └── documents.json
-│   ├── embeddings/
-│   │   └── embeddings.npy
-│   └── cache/                     # Model cache
-├── scripts/
-│   └── build_documents.py         # Data processing
-├── requirements.txt               # Python dependencies
-└── .env.example                   # Configuration template
-```
-
-### Running in Development
-
-For local development with hot-reload:
-
-**Backend** (in one terminal):
 ```bash
 python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-**Frontend** (in another terminal):
+Frontend:
+
 ```bash
 cd frontend
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:5173` with hot-module reloading enabled.
+The Vite app calls `http://localhost:8000` during local development and same-origin `/api` routes in production.
 
-## License
+## Data And Embeddings
 
-This project is open source. See LICENSE file for details.
-
-## Support
-
-For issues or questions:
-1. Check the [Troubleshooting](#troubleshooting) section above
-2. Review [Google AI Studio](https://aistudio.google.com) for API-related issues
-3. Check backend logs for detailed error messages
-
-### Environment Variables
-
-```env
-# Required
-GEMINI_API_KEY=your_api_key_here
-
-# Optional - Gemini settings
-GEMINI_MODEL=gemini-2.5-flash                              # Primary model to use
-GEMINI_FALLBACK_MODEL=gemini-2.5-flash-lite                # Fallback if primary is overloaded
-GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta
-
-# Optional - Embedding model
-EMBEDDING_MODEL=all-MiniLM-L6-v2                           # Sentence transformer model
-
-# Optional - Chat behavior
-CHAT_MEMORY_TURNS=6                                        # Number of conversation turns to keep in memory
-```
-
-### Key Configuration Details
-
-- **CHAT_MEMORY_TURNS**: Controls how many message pairs to retain. Higher values = longer memory but more API tokens used.
-- **EMBEDDING_MODEL**: Change this to use different sentence-transformer models for search. Must match the embeddings in `data/embeddings/embeddings.npy`.
-- **GEMINI_FALLBACK_MODEL**: Automatically used if primary model is unavailable or quota-limited.
-
-## Data & Embeddings
-
-### Processing the Dataset
-
-If you modify the source data in `data/raw/`, rebuild the processed documents and embeddings:
+If raw data changes, rebuild the processed documents:
 
 ```bash
-# Rebuild documents from raw CSV files
+python -m pip install -r requirements-dev.txt
 python scripts/build_documents.py
+```
 
-# Generate new embeddings
+Upload fresh document embeddings to Pinecone:
+
+```bash
 python backend/embeddings/embed.py
 ```
 
-**What these scripts do:**
-- `build_documents.py` - Converts raw CSV files into structured documents (`data/processed/documents.json`)
-- `embed.py` - Generates vector embeddings for each document using the configured embedding model
+Run `embed.py` again whenever you change:
 
-### Document Format
+- `data/processed/documents.json`
+- `GEMINI_EMBEDDING_MODEL`
+- `GEMINI_EMBEDDING_DIMENSIONS`
+- Pinecone index settings
 
-Each document in `documents.json` has:
+Large generated files such as local embedding arrays and model caches are ignored and should not be committed.
+
+## API
+
+### `GET /health`
+
+Returns:
+
+```json
+{"status": "ok"}
+```
+
+### `POST /api/chat`
+
+Request:
+
 ```json
 {
-  "id": "unique-id",
-  "text": "Product information and details...",
-  "metadata": {
-    "product_name": "...",
-    "category": "...",
-    "price": "..."
-  }
+  "message": "Suggest products for oily skin",
+  "session_id": "browser-session-id"
 }
 ```
 
-### Embeddings Cache
+Response:
 
-The first run of `embed.py` downloads the embedding model from Hugging Face and caches it in `data/cache/huggingface/`. Subsequent runs use the cached model for faster processing.
+```json
+{
+  "answer": "Here are some options...",
+  "session_id": "browser-session-id"
+}
+```
+
+### `POST /api/reset`
+
+Request:
+
+```json
+{
+  "session_id": "browser-session-id"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "cleared",
+  "session_id": "browser-session-id"
+}
+```
+
+## Vercel Deployment
+
+The project is configured for Vercel with:
+
+- `api/index.py` as the Python serverless entrypoint
+- `vercel.json` routing `/api/*` and `/health` to FastAPI
+- `frontend/dist` as the static output directory
+- `.vercelignore` excluding local caches, logs, and build artifacts
+
+Set the same required environment variables in Vercel Project Settings before deploying.
+
+Deploy:
+
+```bash
+npx vercel --prod
+```
 
 ## Troubleshooting
 
-### "API returned empty response"
-- The Gemini model returned no content. Check your API quota in [Google AI Studio](https://aistudio.google.com)
-- Try again in a few moments; there may be temporary service issues
+### Frontend says "Failed to fetch"
 
-### Chat responses fail but API is running
-- Verify `GEMINI_API_KEY` is set correctly in `.env`
-- Check that your API key has access to the `GEMINI_MODEL` you specified
-- Ensure you're not exceeding your Gemini API quota
+- In production, make sure the deployed frontend is calling same-origin `/api/chat`.
+- In local development, make sure FastAPI is running on `http://127.0.0.1:8000`.
 
-### "Could not load embedding model"
-- Run `python backend/embeddings/embed.py` to download and cache the model
-- Ensure you have internet connectivity on first run
-- Check that `EMBEDDING_MODEL` matches an available sentence-transformers model
+### `GEMINI_API_KEY is not set`
 
-### Frontend loads but chat doesn't work
-- Check browser console for errors (F12 → Console tab)
-- Verify the FastAPI backend is running on `http://127.0.0.1:8000`
-- Ensure CORS is configured correctly (already set in `main.py` for localhost)
+- Add `GEMINI_API_KEY` locally in `.env`.
+- Add it to Vercel environment variables and redeploy.
 
-### First chat response is very slow
-- Expected behavior! The Gemini model warms up on first request. Subsequent responses are faster.
-- If it takes longer than 30 seconds, check your internet connection and API quota
+### Embedding request fails
 
-### Memory not working
-- Verify the browser has localStorage enabled
-- Check that `session_id` is being sent in API requests
-- Ensure conversation history is being logged to the API (check backend logs)
-- Try clearing browser storage and reloading the page
->>>>>>> 5044c03 (initial commit)
+- Verify `GEMINI_EMBEDDING_MODEL` is available for your API key.
+- The current default is `gemini-embedding-001`.
+
+### Pinecone returns poor matches
+
+- Re-run `python backend/embeddings/embed.py` so stored document vectors match the current Gemini embedding model and dimensions.
+
+### Vercel bundle exceeds Lambda storage
+
+- Keep production dependencies in `requirements.txt` small.
+- Put local-only tooling in `requirements-dev.txt`.
+- Do not commit `data/cache/`, `data/embeddings/`, `frontend/node_modules/`, or `frontend/dist/`.

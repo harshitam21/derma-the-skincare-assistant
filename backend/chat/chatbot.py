@@ -14,7 +14,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 load_dotenv(PROJECT_ROOT / ".env")
 
-MAX_MEMORY_TURNS = int(os.getenv("CHAT_MEMORY_TURNS", "6"))
+
+def env_value(name, default=None):
+    value = os.getenv(name, default)
+    if isinstance(value, str):
+        return value.lstrip("\ufeff").strip()
+    return value
+
+
+MAX_MEMORY_TURNS = int(env_value("CHAT_MEMORY_TURNS", "6"))
 DEFAULT_SESSION_ID = "default"
 
 _chat_memories = defaultdict(lambda: deque(maxlen=MAX_MEMORY_TURNS * 2))
@@ -151,13 +159,13 @@ def _remember(session_id, role, content):
 
 
 def get_gemini_config():
-    base_url = os.getenv(
+    base_url = env_value(
         "GEMINI_API_BASE_URL",
         "https://generativelanguage.googleapis.com/v1beta",
     ).rstrip("/")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite")
-    api_key = os.getenv("GEMINI_API_KEY")
+    model = env_value("GEMINI_MODEL", "gemini-2.5-flash")
+    fallback_model = env_value("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite")
+    api_key = env_value("GEMINI_API_KEY")
 
     if not api_key:
         raise RuntimeError(

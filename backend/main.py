@@ -17,6 +17,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,6 +52,11 @@ def chat(request: ChatRequest):
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Assistant backend error: {type(exc).__name__}: {exc}",
+        ) from exc
 
     return ChatResponse(answer=answer, session_id=request.session_id)
 

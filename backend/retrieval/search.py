@@ -1,61 +1,99 @@
 import json
 import os
-import numpy as np
 from pathlib import Path
-from sklearn.metrics.pairwise import cosine_similarity
 
-# Keep transformers on the PyTorch path. TensorFlow is not needed here and can
-# fail to import when its protobuf dependency is mismatched.
-os.environ.setdefault("USE_TF", "0")
-os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
-os.environ.setdefault("HF_HOME", str(Path("data/cache/huggingface").resolve()))
-os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "60")
-os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")
+import requests
+from dotenv import load_dotenv
 
-from sentence_transformers import SentenceTransformer
+from pinecone import Pinecone
 
-MODEL_NAME = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-CACHE_FOLDER = str(Path("data/cache/huggingface").resolve())
+load_dotenv(Path(".env"))
 
 
-def load_embedding_model():
-    try:
-        return SentenceTransformer(MODEL_NAME, cache_folder=CACHE_FOLDER)
-    except Exception as exc:
+def env_value(name, default=None):
+    value = os.getenv(name, default)
+    if isinstance(value, str):
+        return value.lstrip("\ufeff").strip()
+    return value
+
+
+GEMINI_API_BASE_URL = env_value(
+    "GEMINI_API_BASE_URL",
+    "https://generativelanguage.googleapis.com/v1beta",
+).rstrip("/")
+EMBEDDING_MODEL = env_value("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+EMBEDDING_DIMENSIONS = int(env_value("GEMINI_EMBEDDING_DIMENSIONS", "384"))
+PINECONE_INDEX_NAME = env_value("PINECONE_INDEX_NAME", "derma-skincare")
+PINECONE_NAMESPACE = env_value("PINECONE_NAMESPACE", "")
+
+
+def embed_text(text):
+    api_key = env_value("GEMINI_API_KEY")
+    if not api_key:
         raise RuntimeError(
-            f"Could not load embedding model '{MODEL_NAME}' from the local cache. "
-            "Connect to the internet once and run `python backend/embeddings/embed.py`, "
-            "or set EMBEDDING_MODEL to a local sentence-transformers model folder."
-        ) from exc
+            "GEMINI_API_KEY is not set. Add it to your project-root .env file "
+            "and to your Vercel project environment variables."
+        )
+
+    response = requests.post(
+        f"{GEMINI_API_BASE_URL}/models/{EMBEDDING_MODEL}:embedContent",
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
+        json={
+            "content": {"parts": [{"text": text}]},
+            "taskType": "RETRIEVAL_QUERY",
+            "outputDimensionality": EMBEDDING_DIMENSIONS,
+        },
+        timeout=60,
+    )
+
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        raise RuntimeError(f"Gemini embedding request failed: {response.text}") from exc
+
+    values = response.json().get("embedding", {}).get("values")
+    if not values:
+        raise RuntimeError("Gemini returned an empty embedding.")
+    return values
 
 
-# Load model
-model = load_embedding_model()
+def get_pinecone_index():
+    api_key = env_value("PINECONE_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "PINECONE_API_KEY is not set. Add it to your project-root .env file."
+        )
 
-# Load documents
-with open("data/processed/documents.json", "r", encoding="utf-8") as f:
-    documents = json.load(f)
+    return Pinecone(api_key=api_key).Index(PINECONE_INDEX_NAME)
 
-# Load embeddings
-embeddings = np.load("data/embeddings/embeddings.npy")
 
 def search(query, top_k=5):
-
-    # Encode query
-    query_embedding = model.encode([query])
-
-    # Compute similarity
-    similarities = cosine_similarity(query_embedding, embeddings)[0]
-
-    # Get top matches
-    top_indices = similarities.argsort()[-top_k:][::-1]
+    query_embedding = embed_text(query)
+    response = get_pinecone_index().query(
+        vector=query_embedding,
+        top_k=top_k,
+        namespace=PINECONE_NAMESPACE,
+        include_metadata=True,
+    )
 
     results = []
-
-    for idx in top_indices:
+    for match in response.get("matches", []):
+        metadata = match.get("metadata") or {}
+        try:
+            document_metadata = json.loads(metadata.get("metadata_json", "{}"))
+        except json.JSONDecodeError:
+            document_metadata = {}
+        document = {
+            "id": metadata.get("document_id", match.get("id")),
+            "text": metadata.get("text", ""),
+            "metadata": document_metadata,
+        }
         results.append({
-            "score": float(similarities[idx]),
-            "document": documents[idx]
+            "score": float(match.get("score", 0.0)),
+            "document": document,
         })
 
     return results
