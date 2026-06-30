@@ -60,6 +60,7 @@ skincare-assistant/
 - Node.js and npm
 - Google AI Studio API key
 - Pinecone API key
+- Firebase project with Email/Password Authentication and Firestore enabled
 
 ## Environment Variables
 
@@ -74,6 +75,13 @@ Required:
 ```env
 GEMINI_API_KEY=your_gemini_api_key
 PINECONE_API_KEY=your_pinecone_api_key
+VITE_FIREBASE_API_KEY=your_firebase_api_key
+VITE_FIREBASE_AUTH_DOMAIN=derma-3e199.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=derma-3e199
+VITE_FIREBASE_STORAGE_BUCKET=derma-3e199.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=36719323160
+VITE_FIREBASE_APP_ID=1:36719323160:web:ebc7aee1ab104b9e01fb6d
+VITE_FIREBASE_MEASUREMENT_ID=G-PYTN35TF2H
 ```
 
 Common optional values:
@@ -96,6 +104,36 @@ PINECONE_UPSERT_BATCH_SIZE=100
 
 The Pinecone index dimension must match `GEMINI_EMBEDDING_DIMENSIONS`.
 
+## Firebase Login
+
+The frontend uses Firebase Authentication for email/password login. On signup or login, the app writes a user document to Firestore:
+
+```text
+users/{uid}
+```
+
+Stored fields include:
+
+- `uid`
+- `email`
+- `displayName`
+- `createdAt` for new accounts
+- `lastLoginAt` on every login
+
+Firebase setup:
+
+1. Create a Firebase project.
+2. Add a Web app and copy its config values into the `VITE_FIREBASE_*` environment variables. The current Firebase project ID is `derma-3e199`.
+3. Enable Authentication -> Sign-in method -> Email/Password.
+4. Enable Firestore Database.
+5. Add the same `VITE_FIREBASE_*` values to Vercel and redeploy.
+
+In production, Firebase's `/__/auth/*` helper endpoints are reverse-proxied through the app domain by `vercel.json`. The frontend therefore uses the current production host as `authDomain`; local development continues to use `VITE_FIREBASE_AUTH_DOMAIN`. Add every production and preview hostname to Firebase Authentication -> Settings -> Authorized domains. For OAuth providers, also authorize:
+
+```text
+https://<app-domain>/__/auth/handler
+```
+
 ## Local Setup
 
 Install Python dependencies:
@@ -116,13 +154,13 @@ cd ..
 Run the FastAPI app:
 
 ```bash
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+powershell -ExecutionPolicy Bypass -File scripts/dev_backend.ps1
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8001
 ```
 
 ## Development
@@ -132,7 +170,7 @@ For local frontend hot reload, run the backend and frontend separately.
 Backend:
 
 ```bash
-python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+powershell -ExecutionPolicy Bypass -File scripts/dev_backend.ps1
 ```
 
 Frontend:
@@ -142,7 +180,13 @@ cd frontend
 npm run dev
 ```
 
-The Vite app calls `http://localhost:8000` during local development and same-origin `/api` routes in production.
+Open the local frontend at:
+
+```text
+http://localhost:5173
+```
+
+The Vite app calls same-origin `/api` routes. During local development, Vite proxies `/api` to `http://127.0.0.1:8001`; in production, Vercel routes `/api` to the FastAPI serverless entrypoint.
 
 ## Data And Embeddings
 
@@ -239,7 +283,7 @@ npx vercel --prod
 ### Frontend says "Failed to fetch"
 
 - In production, make sure the deployed frontend is calling same-origin `/api/chat`.
-- In local development, make sure FastAPI is running on `http://127.0.0.1:8000`.
+- In local development, make sure FastAPI is running on `http://127.0.0.1:8001`.
 
 ### `GEMINI_API_KEY is not set`
 

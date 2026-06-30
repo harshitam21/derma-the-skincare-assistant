@@ -4,22 +4,35 @@ import {
   Bot,
   Eraser,
   History,
+  LogIn,
+  LogOut,
   Loader2,
+  Lock,
+  Mail,
   Plus,
   RotateCcw,
   Send,
   Sparkles,
   Trash2,
+  UserPlus,
   UserRound,
 } from "lucide-react";
+import {
+  createUserWithEmailAndPassword,
+  getRedirectResult,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+} from "firebase/auth";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db, hasFirebaseConfig } from "./firebase";
 import "./styles.css";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  (["localhost", "127.0.0.1"].includes(window.location.hostname) &&
-  window.location.port !== "8000"
-    ? `${window.location.protocol}//${window.location.hostname}:8000`
-    : "");
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const googleProvider = new GoogleAuthProvider();
 
 const starterPrompts = [
   "Suggest products for hyperpigmentation",
@@ -29,6 +42,10 @@ const starterPrompts = [
 ];
 
 const HISTORY_STORAGE_KEY = "skincare-chat-history";
+
+function historyStorageKey(user) {
+  return `${HISTORY_STORAGE_KEY}:${user.uid}`;
+}
 
 function welcomeMessage(id = "welcome") {
   return {
@@ -51,14 +68,14 @@ function createConversation() {
   };
 }
 
-function loadConversations() {
+function loadConversations(storageKey) {
   try {
-    const parsed = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY) || "[]");
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
     if (Array.isArray(parsed) && parsed.length > 0) {
       return parsed;
     }
   } catch {
-    localStorage.removeItem(HISTORY_STORAGE_KEY);
+    localStorage.removeItem(storageKey);
   }
 
   return [createConversation()];
@@ -82,10 +99,10 @@ function formatHistoryTime(timestamp) {
 }
 
 function App() {
-  const [conversations, setConversations] = useState(loadConversations);
-  const [activeConversationId, setActiveConversationId] = useState(
-    () => conversations[0]?.id,
-  );
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [conversations, setConversations] = useState([]);
+  const [activeConversationId, setActiveConversationId] = useState(undefined);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSlowStart, setIsSlowStart] = useState(false);
@@ -107,12 +124,40 @@ function App() {
   }, [error, isLoading]);
 
   useEffect(() => {
+    if (!auth) {
+      setAuthReady(true);
+      return undefined;
+    }
+
+    return onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthReady(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setConversations([]);
+      setActiveConversationId(undefined);
+      return;
+    }
+
+    const nextConversations = loadConversations(historyStorageKey(user));
+    setConversations(nextConversations);
+    setActiveConversationId(nextConversations[0]?.id);
+    setInput("");
+    setError("");
+  }, [user]);
+
+  useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
   useEffect(() => {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(conversations));
-  }, [conversations]);
+    if (user && conversations.length > 0) {
+      localStorage.setItem(historyStorageKey(user), JSON.stringify(conversations));
+    }
+  }, [conversations, user]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -169,9 +214,13 @@ function App() {
         body: JSON.stringify({ message: trimmed, session_id: requestSessionId }),
       });
 
-      const data = await response.json();
+      const data = await readJsonResponse(response);
       if (!response.ok) {
-        throw new Error(data.detail || "The assistant could not respond.");
+        throw new Error(apiErrorMessage(data, response));
+      }
+
+      if (!data?.answer) {
+        throw new Error("The assistant returned an empty response.");
       }
 
       updateConversation(conversationId, (conversation) => ({
@@ -256,6 +305,30 @@ function App() {
     sendMessage();
   }
 
+  async function handleSignOut() {
+    setError("");
+    await signOut(auth);
+  }
+
+  if (!hasFirebaseConfig) {
+    return <MissingFirebaseConfig />;
+  }
+
+  if (!authReady) {
+    return (
+      <main className="app-shell">
+        <div className="auth-panel compact-auth">
+          <Loader2 size={22} className="spin" />
+          <span>Preparing sign in...</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return <AuthView />;
+  }
+
   return (
     <main className="app-shell">
       <div className="chat-layout">
@@ -311,14 +384,19 @@ function App() {
               <div className="brand-mark" aria-hidden="true">
                 <Sparkles size={20} />
               </div>
-              <div>
-                <h1>Skincare Assistant</h1>
-                <p>{statusText}</p>
-              </div>
+            <div>
+              <h1>Skincare Assistant</h1>
+              <p>{statusText} · {user.email}</p>
             </div>
-            <button className="icon-button" type="button" onClick={resetChat} title="Clear chat memory">
-              <RotateCcw size={18} />
-            </button>
+          </div>
+            <div className="topbar-actions">
+              <button className="icon-button" type="button" onClick={resetChat} title="Clear chat memory">
+                <RotateCcw size={18} />
+              </button>
+              <button className="icon-button" type="button" onClick={handleSignOut} title="Sign out">
+                <LogOut size={18} />
+              </button>
+            </div>
           </header>
 
           <div className="prompt-strip" aria-label="Starter prompts">
@@ -398,6 +476,295 @@ function App() {
       </div>
     </main>
   );
+}
+
+function MissingFirebaseConfig() {
+  return (
+    <main className="app-shell">
+      <section className="auth-panel">
+        <div className="auth-brand">
+          <div className="brand-mark" aria-hidden="true">
+            <Sparkles size={22} />
+          </div>
+          <div>
+            <h1>Firebase setup needed</h1>
+            <p>Add `VITE_FIREBASE_API_KEY` to your project-root `.env` file and rebuild the frontend.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+async function readJsonResponse(response) {
+  const text = await response.text();
+  if (!text.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (!response.ok) {
+      return { detail: text };
+    }
+    throw new Error("The assistant returned a response that was not valid JSON.");
+  }
+}
+
+function apiErrorMessage(data, response) {
+  if (typeof data?.detail === "string") {
+    return data.detail;
+  }
+
+  if (Array.isArray(data?.detail)) {
+    return data.detail.map((item) => item.msg || item.message || String(item)).join(" ");
+  }
+
+  return `The assistant could not respond. API returned ${response.status} ${response.statusText || ""}`.trim();
+}
+
+function AuthView() {
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSignup = mode === "signup";
+
+  async function saveUserLogin(firebaseUser, extra = {}) {
+    await setDoc(
+      doc(db, "users", firebaseUser.uid),
+      {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || extra.displayName || "",
+        lastLoginAt: serverTimestamp(),
+        ...extra,
+      },
+      { merge: true },
+    );
+  }
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function completeGoogleRedirect() {
+      try {
+        const credential = await getRedirectResult(auth);
+        if (!isActive || !credential?.user) return;
+
+        await saveUserLogin(credential.user, {
+          displayName: credential.user.displayName || "",
+        });
+      } catch (err) {
+        if (isActive) {
+          setAuthError(authErrorMessage(err));
+        }
+      }
+    }
+
+    completeGoogleRedirect();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  async function handleAuthSubmit(event) {
+    event.preventDefault();
+    setAuthError("");
+    setIsSubmitting(true);
+
+    try {
+      if (isSignup) {
+        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const displayName = name.trim();
+        if (displayName) {
+          await updateProfile(credential.user, { displayName });
+        }
+        await saveUserLogin(credential.user, {
+          displayName,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        await saveUserLogin(credential.user);
+      }
+    } catch (err) {
+      setAuthError(authErrorMessage(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setAuthError("");
+    setIsSubmitting(true);
+
+    try {
+      await signInWithRedirect(auth, googleProvider);
+    } catch (err) {
+      setAuthError(authErrorMessage(err));
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="app-shell">
+      <section className="auth-panel" aria-label="Account access">
+        <div className="auth-brand">
+          <div className="brand-mark" aria-hidden="true">
+            <Sparkles size={22} />
+          </div>
+          <div>
+            <h1>Skincare Assistant</h1>
+            <p>{isSignup ? "Create an account to start chatting." : "Sign in to continue your skincare chats."}</p>
+          </div>
+        </div>
+
+        <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
+          <button
+            type="button"
+            className={!isSignup ? "active" : ""}
+            onClick={() => {
+              setMode("login");
+              setAuthError("");
+            }}
+          >
+            <LogIn size={17} />
+            <span>Login</span>
+          </button>
+          <button
+            type="button"
+            className={isSignup ? "active" : ""}
+            onClick={() => {
+              setMode("signup");
+              setAuthError("");
+            }}
+          >
+            <UserPlus size={17} />
+            <span>Sign up</span>
+          </button>
+        </div>
+
+        <form className="auth-form" onSubmit={handleAuthSubmit}>
+          {isSignup && (
+            <label className="field">
+              <span>Name</span>
+              <div className="field-control">
+                <UserRound size={18} />
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Your name"
+                  autoComplete="name"
+                />
+              </div>
+            </label>
+          )}
+
+          <label className="field">
+            <span>Email</span>
+            <div className="field-control">
+              <Mail size={18} />
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+              />
+            </div>
+          </label>
+
+          <label className="field">
+            <span>Password</span>
+            <div className="field-control">
+              <Lock size={18} />
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="At least 6 characters"
+                autoComplete={isSignup ? "new-password" : "current-password"}
+                minLength={6}
+                required
+              />
+            </div>
+          </label>
+
+          {authError && (
+            <div className="error-bar auth-error" role="alert">
+              {authError}
+            </div>
+          )}
+
+          <button className="auth-submit" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? <Loader2 size={18} className="spin" /> : isSignup ? <UserPlus size={18} /> : <LogIn size={18} />}
+            <span>{isSubmitting ? "Please wait" : isSignup ? "Create account" : "Login"}</span>
+          </button>
+        </form>
+
+        <div className="auth-divider">
+          <span>or</span>
+        </div>
+
+        <button className="google-auth-button" type="button" onClick={handleGoogleSignIn} disabled={isSubmitting}>
+          {isSubmitting ? <Loader2 size={18} className="spin" /> : <GoogleMark />}
+          <span>Continue with Google</span>
+        </button>
+      </section>
+    </main>
+  );
+}
+
+function GoogleMark() {
+  return (
+    <svg className="google-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06L5.84 9.9C6.71 7.31 9.14 5.38 12 5.38z"
+      />
+    </svg>
+  );
+}
+
+function authErrorMessage(err) {
+  switch (err?.code) {
+    case "auth/email-already-in-use":
+      return "That email already has an account. Try logging in instead.";
+    case "auth/invalid-credential":
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+      return "The email or password is incorrect.";
+    case "auth/weak-password":
+      return "Use a password with at least 6 characters.";
+    case "auth/invalid-email":
+      return "Enter a valid email address.";
+    case "auth/popup-closed-by-user":
+      return "Google sign-in was closed before it finished.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google sign-in popup. Allow popups and try again.";
+    case "auth/unauthorized-domain":
+      return `Firebase has not authorized this domain: ${window.location.hostname}. Add it in Firebase Authentication settings.`;
+    default:
+      return err?.message || "Authentication failed. Please try again.";
+  }
 }
 
 createRoot(document.getElementById("root")).render(<App />);
