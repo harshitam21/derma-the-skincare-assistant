@@ -1,4 +1,4 @@
-# 🧴 AI-Powered Skincare Assistant & Safety Analyzer
+#  AI-Powered Skincare Assistant & Safety Analyzer
 
 A professional, full-stack AI skincare consultation web application. It features a profile-driven routine generator using real clinical datasets, a real-time chemical active conflict checker, a banned/toxic ingredient safety analyzer based on global standards, and an interactive RAG-powered chatbot.
 
@@ -9,29 +9,29 @@ A professional, full-stack AI skincare consultation web application. It features
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-### 1. 📋 Skin Profile Routine Suggestor
+### 1. Skin Profile Routine Suggestor
 * **One-Click Generation:** Generates routines directly from your onboarded Skin Profile (Skin Type, Condition/Disease, and Age).
 * **Database-Driven Recommendations:** Queries a raw clinical dataset (`Skincare Treatment Dataset.csv`) to fetch clinically backed ingredients suited to your parameters.
 * **Safety Integration:** Automatically parses recommended actives to verify they don't conflict with each other or your age group before generating.
 
-### 2. 🧪 Active Ingredient Conflict Checker
+### 2. Active Ingredient Conflict Checker
 * Detects hazardous pairing conflicts in real-time (e.g., *Retinoids + Salicylic Acid*, *Vitamin C + AHAs*).
 * Returns severity categories (High Danger, Moderate Danger) along with chemical explanations and spacing recommendations.
 
-### 3. ⚠️ 15 Toxic/Harmful Skincare Watch-list
+### 3. 15 Toxic/Harmful Skincare Watch-list
 * Cross-references ingredients against a database of 15 globally restricted/banned chemicals highlighted in the Parama Naturals skincare watch-list (including formaldehyde-releasers, phthalates, sulfates, parabens, synthetic fragrances, and silicones).
 * Instantly flags any matching compounds in your pasted ingredient list.
 
-### 4. 💬 RAG Skincare Chatbot
+### 4. RAG Skincare Chatbot
 * Powered by Google Gemini.
 * Grounded in Pinecone vector search databases containing product catalogs.
 * Enforces strict ingredient safety logic directly in system prompts.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph TD
@@ -46,7 +46,7 @@ graph TD
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 * Node.js (v18+)
@@ -92,7 +92,7 @@ graph TD
 
 ---
 
-## ☁️ Deployment
+## Deployment
 
 This project is configured for single-command deployments on **Vercel** via monorepo builders configuration.
 
