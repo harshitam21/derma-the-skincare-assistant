@@ -269,7 +269,7 @@ def ask_gemini(messages):
     )
 
 
-def generate_response(user_query, session_id=DEFAULT_SESSION_ID):
+def generate_response(user_query, session_id=DEFAULT_SESSION_ID, skin_type=None, concerns=None, preferences=None):
     from backend.retrieval.search import search
 
     memory = _get_memory(session_id)
@@ -294,6 +294,35 @@ def generate_response(user_query, session_id=DEFAULT_SESSION_ID):
         for result in results
     ])
 
+    # Construct Profile Context
+    profile_details = []
+    if skin_type:
+        profile_details.append(f"- Skin Type: {skin_type}")
+    if concerns:
+        profile_details.append(f"- Skin Concerns: {concerns}")
+    if preferences:
+        profile_details.append(f"- Preferences: {preferences}")
+
+    profile_section = ""
+    if profile_details:
+        profile_section = "User Skin Profile:\n" + "\n".join(profile_details) + "\n\n"
+
+    # Load hazardous combinations database instructions
+    import json
+    conflicts_text = ""
+    json_path = Path(__file__).resolve().parents[2] / "data" / "processed" / "hazardous_combinations.json"
+    if not json_path.exists():
+        json_path = Path(__file__).resolve().parent / "data" / "processed" / "hazardous_combinations.json"
+    try:
+        if json_path.exists():
+            with open(json_path, "r", encoding="utf-8") as f:
+                conflicts_data = json.load(f)
+                conflicts_text = "Hazardous Skincare Combinations database warning rules (DO NOT recommend using these together in the same AM or PM routine):\n"
+                for conflict in conflicts_data:
+                    conflicts_text += f"- { ' + '.join(conflict['actives']) }: {conflict['reason']}\n"
+    except Exception:
+        pass
+
     # Prompt
     prompt = f"""
     You are a friendly AI skincare assistant.
@@ -303,11 +332,15 @@ def generate_response(user_query, session_id=DEFAULT_SESSION_ID):
     - explain skincare concepts clearly
     - use the retrieved information below
     - use conversation history only when it is provided below
-    - never claim the user has previous history, persistent issues, or a known skin type unless it appears in the current question or provided history
+    - focus recommendations on matching the user's skin profile (type, concerns, preferences) if provided
     - when the user adds a budget or price limit, apply it to the products or product type already being discussed
+    - check the Hazardous Skincare Combinations rules below to make sure you never suggest conflicting actives together
     - avoid medical diagnosis
     - avoid making unsupported claims
 
+    {conflicts_text}
+
+    {profile_section}
     {history_section}
 
     Retrieved Information:

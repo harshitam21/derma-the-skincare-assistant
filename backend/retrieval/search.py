@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from pinecone import Pinecone
 
-load_dotenv(Path(".env"))
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
 def env_value(name, default=None):
@@ -25,6 +25,8 @@ EMBEDDING_MODEL = env_value("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
 EMBEDDING_DIMENSIONS = int(env_value("GEMINI_EMBEDDING_DIMENSIONS", "384"))
 PINECONE_INDEX_NAME = env_value("PINECONE_INDEX_NAME", "derma-skincare")
 PINECONE_NAMESPACE = env_value("PINECONE_NAMESPACE", "")
+if PINECONE_NAMESPACE == "__default__":
+    PINECONE_NAMESPACE = ""
 
 
 def embed_text(text):
@@ -80,19 +82,19 @@ def search(query, top_k=5):
     )
 
     results = []
-    for match in response.get("matches", []):
-        metadata = match.get("metadata") or {}
+    for match in response.matches:
+        metadata = match.metadata or {}
         try:
             document_metadata = json.loads(metadata.get("metadata_json", "{}"))
         except json.JSONDecodeError:
             document_metadata = {}
         document = {
-            "id": metadata.get("document_id", match.get("id")),
+            "id": metadata.get("document_id", match.id),
             "text": metadata.get("text", ""),
             "metadata": document_metadata,
         }
         results.append({
-            "score": float(match.get("score", 0.0)),
+            "score": float(match.score or 0.0),
             "document": document,
         })
 

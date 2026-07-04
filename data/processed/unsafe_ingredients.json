@@ -1,0 +1,92 @@
+[
+  {
+    "name": "Formaldehyde / Formaldehyde-Releasers",
+    "patterns": ["formaldehyde", "dmdm hydantoin", "quaternium-15", "diazolidinyl urea", "imidazolidinyl urea"],
+    "hazard_level": "High Danger",
+    "reason": "Known human carcinogen and strong skin allergen. Banned or heavily restricted in EU cosmetics."
+  },
+  {
+    "name": "Phthalates (DBP / DEHP)",
+    "patterns": ["phthalate", "dibutyl phthalate", "diethylhexyl phthalate"],
+    "hazard_level": "High Danger",
+    "reason": "Endocrine disruptor linked to hormone irregularities and reproductive issues. Banned in EU cosmetics."
+  },
+  {
+    "name": "Triclosan",
+    "patterns": ["triclosan", "triclocarban"],
+    "hazard_level": "Moderate Danger",
+    "reason": "Antimicrobial agent that disrupts thyroid and reproductive hormones. Banned in EU wash-off cosmetics."
+  },
+  {
+    "name": "Hydroquinone (OTC)",
+    "patterns": ["hydroquinone"],
+    "hazard_level": "Moderate Danger",
+    "reason": "Skin-bleaching agent banned in OTC products in the EU due to risks of ochronosis (permanent skin discoloration) and potential toxicity."
+  },
+  {
+    "name": "Coal Tar Dyes (PPD)",
+    "patterns": ["coal tar", "p-phenylenediamine", "cl 75810", "cl 17200"],
+    "hazard_level": "High Danger",
+    "reason": "Carcinogenic petroleum byproduct frequently contaminated with heavy metals. Banned or highly restricted globally."
+  },
+  {
+    "name": "Isobutylparaben / Isopropylparaben",
+    "patterns": ["isobutylparaben", "isopropylparaben"],
+    "hazard_level": "Moderate Danger",
+    "reason": "Endocrine-disrupting preservative that mimics estrogen. Banned under EU cosmetic standards."
+  },
+  {
+    "name": "Sulfates (SLS / SLES)",
+    "patterns": ["sodium lauryl sulfate", "sodium laureth sulfate", "ammonium lauryl sulfate"],
+    "hazard_level": "Moderate Danger",
+    "reason": "Aggressive surfactant that strips natural lipids, causes chronic dryness, and compromises sensitive skin barriers."
+  },
+  {
+    "name": "Synthetic Fragrance / Parfum",
+    "patterns": ["fragrance", "parfum", "synthetic scent"],
+    "hazard_level": "Low Danger",
+    "reason": "Top cause of cosmetic contact dermatitis. Often contains undisclosed endocrine-disrupting phthalates."
+  },
+  {
+    "name": "Mineral Oil / Liquidum Paraffinum",
+    "patterns": ["mineral oil", "paraffin", "paraffinum liquidum", "petrolatum oil"],
+    "hazard_level": "Low Danger",
+    "reason": "Occlusive petroleum derivative that blocks pores, traps dirt, and can exacerbate cystic acne-prone skin."
+  },
+  {
+    "name": "Toluene",
+    "patterns": ["toluene", "methylbenzene", "phenylmethane"],
+    "hazard_level": "High Danger",
+    "reason": "Potent neurotoxin and endocrine disruptor commonly found in nail products and hair dyes."
+  },
+  {
+    "name": "Butylated Hydroxyanisole / Hydroxytoluene (BHA / BHT)",
+    "patterns": ["butylated hydroxyanisole", "butylated hydroxytoluene", "bha preservative", "bht preservative"],
+    "hazard_level": "Moderate Danger",
+    "reason": "Preservative linked to skin depigmentation, hormone disruption, and aquatic eco-toxicity."
+  },
+  {
+    "name": "Oxybenzone (Benzophenone-3)",
+    "patterns": ["oxybenzone", "benzophenone-3", "benzophenone"],
+    "hazard_level": "Moderate Danger",
+    "reason": "Chemical sunscreen filter linked to cell damage, hormone disruption, and significant coral reef bleaching."
+  },
+  {
+    "name": "Polyethylene Glycol (PEGs)",
+    "patterns": ["polyethylene glycol", "peg-100", "peg-40", "peg-8"],
+    "hazard_level": "Low Danger",
+    "reason": "Enhancer that increases skin penetration but is often contaminated with carcinogenic 1,4-dioxane."
+  },
+  {
+    "name": "Siloxanes / Silicones",
+    "patterns": ["cyclomethicone", "cyclopentasiloxane", "siloxane"],
+    "hazard_level": "Low Danger",
+    "reason": "Synthetic silicones that accumulate in pores, dry out skin over time, and persist in the environment."
+  },
+  {
+    "name": "Synthetic Colors (D&C / FD&C)",
+    "patterns": ["fd&c", "d&c color", "ci 19140", "ci 15985", "ci 42090"],
+    "hazard_level": "Low Danger",
+    "reason": "Coal tar derivatives linked to skin sensitivity, ADHD in children, and heavy metal impurity risks."
+  }
+]

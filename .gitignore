@@ -8,3 +8,4 @@ data/embeddings/
 data/cache/
 
 .vercel
+.env*

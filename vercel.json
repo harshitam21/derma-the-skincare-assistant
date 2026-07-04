@@ -1,23 +1,38 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/dist",
-  "rewrites": [
+  "builds": [
     {
-      "source": "/__/auth/(.*)",
-      "destination": "https://derma-3e199.firebaseapp.com/__/auth/$1"
+      "src": "api/index.py",
+      "use": "@vercel/python"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index.py"
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "frontend/dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/__/auth/(.*)",
+      "dest": "https://derma-3e199.firebaseapp.com/__/auth/$1"
     },
     {
-      "source": "/health",
-      "destination": "/api/index.py"
+      "src": "/api/(.*)",
+      "dest": "api/index.py"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/health",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/((?!api|health|assets|__).*)",
+      "dest": "/index.html"
     }
   ]
 }

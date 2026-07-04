@@ -13,7 +13,7 @@ export default defineConfig({
       "/__/auth": {
         target: "https://derma-3e199.firebaseapp.com",
         changeOrigin: true,
-        secure: true,
+        secure: false,
       },
     },
   },

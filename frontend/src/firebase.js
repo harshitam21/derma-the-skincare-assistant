@@ -5,13 +5,11 @@ import { getFirestore } from "firebase/firestore";
 
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || "derma-3e199";
 const firebaseAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`;
-const isLocalDevelopment =
-  typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  // Production auth helpers are reverse-proxied through the app's own origin.
-  authDomain: isLocalDevelopment ? firebaseAuthDomain : window.location.host,
+  // Always use the Firebase authDomain — signInWithPopup requires it for the OAuth flow.
+  authDomain: firebaseAuthDomain,
   projectId,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "derma-3e199.firebasestorage.app",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "36719323160",

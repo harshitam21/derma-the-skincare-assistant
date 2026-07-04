@@ -1,0 +1,52 @@
+[
+  {
+    "actives": ["Retinol / Retinoids", "AHAs (Glycolic/Lactic Acid)"],
+    "severity": "High Danger",
+    "reason": "Both exfoliate the skin at different levels. Mixing them causes extreme dryness, skin barrier peeling, irritation, and redness. Use them on alternate nights instead."
+  },
+  {
+    "actives": ["Retinol / Retinoids", "BHAs (Salicylic Acid)"],
+    "severity": "High Danger",
+    "reason": "Retinol speeds up skin cell turnover while BHA penetrates deep to exfoliate pores. Combining them compromises the skin barrier. Space them out across different days."
+  },
+  {
+    "actives": ["Vitamin C (L-Ascorbic Acid)", "AHAs (Glycolic/Lactic Acid)"],
+    "severity": "Moderate Danger",
+    "reason": "Both are highly acidic ingredients. Layering them can destabilize the pH balance, render both less effective, and trigger stinging or irritation."
+  },
+  {
+    "actives": ["Retinol / Retinoids", "Vitamin C (L-Ascorbic Acid)"],
+    "severity": "Moderate Danger",
+    "reason": "Retinol functions best at a neutral pH (5.5 - 6.0), while Vitamin C requires an acidic pH (3.5 or lower). Apply Vitamin C in the AM and Retinol in the PM."
+  },
+  {
+    "actives": ["Benzoyl Peroxide", "Retinol / Retinoids"],
+    "severity": "High Danger",
+    "reason": "Benzoyl peroxide can oxidize and degrade retinoids, rendering them ineffective while simultaneously causing severe dryness and peeling."
+  },
+  {
+    "actives": ["Benzoyl Peroxide", "Vitamin C (L-Ascorbic Acid)"],
+    "severity": "Moderate Danger",
+    "reason": "Benzoyl peroxide is an oxidizing agent that will oxidize Vitamin C, rendering both ingredients useless and potentially causing skin warmth and flushing."
+  },
+  {
+    "actives": ["Glycolic Acid", "Salicylic Acid (BHA)"],
+    "severity": "High Danger",
+    "reason": "Combining multiple strong exfoliants (AHA + BHA) simultaneously strips lipids, breaks down the moisture barrier, and leads to hypersensitivity."
+  },
+  {
+    "actives": ["Benzoyl Peroxide", "Salicylic Acid (BHA)"],
+    "severity": "Moderate Danger",
+    "reason": "Layering Benzoyl Peroxide with Salicylic Acid causes extreme skin peeling, dry flakes, and redness. Alternate their usage or use Benzoyl Peroxide as a spot treatment only."
+  },
+  {
+    "actives": ["Azelaic Acid", "Salicylic Acid (BHA)"],
+    "severity": "Low Danger",
+    "reason": "Layering these two together can cause excessive burning, tingling, and mild peeling. If using both, apply them at different times of day."
+  },
+  {
+    "actives": ["Vitamin C (L-Ascorbic Acid)", "Niacinamide"],
+    "severity": "Low Danger",
+    "reason": "Layering pure acidic Vitamin C directly with Niacinamide can cause chemical conversion to niacin, resulting in temporary skin redness and flushing. Space them 15 minutes apart."
+  }
+]

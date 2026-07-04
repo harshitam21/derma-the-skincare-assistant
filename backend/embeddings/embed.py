@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from pinecone import Pinecone, ServerlessSpec
 
-load_dotenv(Path(".env"))
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
 def env_value(name, default=None):
@@ -25,6 +25,8 @@ EMBEDDING_MODEL = env_value("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
 EMBEDDING_DIMENSIONS = int(env_value("GEMINI_EMBEDDING_DIMENSIONS", "384"))
 PINECONE_INDEX_NAME = env_value("PINECONE_INDEX_NAME", "derma-skincare")
 PINECONE_NAMESPACE = env_value("PINECONE_NAMESPACE", "")
+if PINECONE_NAMESPACE == "__default__":
+    PINECONE_NAMESPACE = ""
 PINECONE_CLOUD = env_value("PINECONE_CLOUD", "aws")
 PINECONE_REGION = env_value("PINECONE_REGION", "us-east-1")
 PINECONE_METRIC = env_value("PINECONE_METRIC", "cosine")

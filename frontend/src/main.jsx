@@ -16,18 +16,19 @@ import {
   Trash2,
   UserPlus,
   UserRound,
+  X,
 } from "lucide-react";
 import {
   createUserWithEmailAndPassword,
-  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
   updateProfile,
+  linkWithCredential,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db, hasFirebaseConfig } from "./firebase";
 import "./styles.css";
 
@@ -98,6 +99,45 @@ function formatHistoryTime(timestamp) {
   }).format(new Date(timestamp));
 }
 
+function PrivacyPolicyModal({ isOpen, onClose }) {
+  if (!isOpen) return null;
+  return (
+    <div className="privacy-modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="privacy-title">
+      <div className="privacy-modal-card" onClick={(e) => e.stopPropagation()}>
+        <header className="privacy-modal-header">
+          <h2 id="privacy-title">Privacy Policy</h2>
+          <button type="button" className="privacy-close-btn" onClick={onClose} title="Close modal">
+            <X size={20} />
+          </button>
+        </header>
+        <div className="privacy-modal-body">
+          <p><strong>Last Updated: July 5, 2026</strong></p>
+          <p>Your privacy is important to us. This Privacy Policy describes how Skincare Assistant collects, uses, and discloses your information.</p>
+          
+          <h3>1. Information We Collect</h3>
+          <ul>
+            <li><strong>Account Information:</strong> When you sign up using email or Google Authentication, we collect your email address, name, and profile metadata via Firebase Authentication.</li>
+            <li><strong>Chat logs:</strong> We collect and temporary process your text queries and responses to recommend skincare products and enable contextual follow-up.</li>
+          </ul>
+
+          <h3>2. How We Use Information</h3>
+          <ul>
+            <li>To retrieve appropriate skincare products and analyze skin routines via the assistant engine.</li>
+            <li>To match queries with product profiles stored in Pinecone indexes.</li>
+            <li>To authenticate you and associate history records with your account.</li>
+          </ul>
+
+          <h3>3. Third-Party Services</h3>
+          <p>Our app processes data through Firebase (Authentication and Firestore databases), Google Gemini API (Model Inference), and Pinecone (Vector database lookup). We do not sell or trade your personal information.</p>
+
+          <h3>4. Security & Data Retention</h3>
+          <p>Your search history remains associated with your account on Firestore and local browser storage. You can delete individual chats or reset memory at any time.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -107,7 +147,86 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSlowStart, setIsSlowStart] = useState(false);
   const [error, setError] = useState("");
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const scrollRef = useRef(null);
+
+  // Phase 1 Onboarding & Skin Profile State
+  const [skinType, setSkinType] = useState("");
+  const [skinConcerns, setSkinConcerns] = useState("");
+  const [preferences, setPreferences] = useState("");
+  const [age, setAge] = useState("");
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
+
+  // Phase 2 Routines State
+  const [routineAM, setRoutineAM] = useState([]);
+  const [routinePM, setRoutinePM] = useState([]);
+  const [activeTab, setActiveTab] = useState("chat"); // 'chat', 'routine', 'analyzer'
+
+  // Phase 4 Dark Mode Theme State
+  const [darkTheme, setDarkTheme] = useState(() => {
+    return localStorage.getItem("skincare-theme") === "dark";
+  });
+
+  // Expose privacy modal globally so AuthView can open it
+  useEffect(() => {
+    window.showPrivacyPolicy = () => setShowPrivacy(true);
+    return () => {
+      delete window.showPrivacyPolicy;
+    };
+  }, []);
+
+  // Sync theme to document body
+  useEffect(() => {
+    if (darkTheme) {
+      document.documentElement.classList.add("dark-theme");
+      localStorage.setItem("skincare-theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark-theme");
+      localStorage.setItem("skincare-theme", "light");
+    }
+  }, [darkTheme]);
+
+  // Load User Profile & Routine data from Firestore when user log in
+  useEffect(() => {
+    if (!user) {
+      setSkinType("");
+      setSkinConcerns("");
+      setPreferences("");
+      setAge("");
+      setRoutineAM([]);
+      setRoutinePM([]);
+      setNeedsOnboarding(false);
+      return;
+    }
+
+    async function loadUserProfile() {
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const data = userDocSnap.data();
+          setSkinType(data.skinType || "");
+          setSkinConcerns(data.skinConcerns || "");
+          setPreferences(data.preferences || "");
+          setAge(data.age || "");
+          setRoutineAM(data.routineAM || []);
+          setRoutinePM(data.routinePM || []);
+          
+          // User needs onboarding if they haven't set their skin type
+          if (!data.skinType) {
+            setNeedsOnboarding(true);
+          }
+        } else {
+          setNeedsOnboarding(true);
+        }
+      } catch (err) {
+        console.error("Error loading user profile:", err);
+      }
+    }
+
+    loadUserProfile();
+  }, [user]);
 
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeConversationId) || conversations[0],
@@ -211,7 +330,13 @@ function App() {
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed, session_id: requestSessionId }),
+        body: JSON.stringify({
+          message: trimmed,
+          session_id: requestSessionId,
+          skin_type: skinType || null,
+          concerns: skinConcerns || null,
+          preferences: preferences || null,
+        }),
       });
 
       const data = await readJsonResponse(response);
@@ -310,6 +435,56 @@ function App() {
     await signOut(auth);
   }
 
+  async function handleAddProductToRoutine(messageContent, timeOfDay) {
+    if (!user) return;
+    
+    // Simple heuristic to extract product names from chatbot text (usually bolded **Product Name** or list items)
+    const productNames = [];
+    const boldMatches = messageContent.match(/\*\*(.*?)\*\*/g);
+    if (boldMatches) {
+      boldMatches.forEach(m => {
+        const cleaned = m.replace(/\*\*/g, "").trim();
+        if (cleaned && cleaned.length > 2 && cleaned.length < 50 && !cleaned.includes(":") && !cleaned.includes("AM") && !cleaned.includes("PM")) {
+          productNames.push(cleaned);
+        }
+      });
+    }
+    
+    // Fallback if no bold text: use first line or split by dashes
+    const fallbackName = messageContent.split("\n")[0].replace(/[*\-#]/g, "").trim().slice(0, 40);
+    const finalName = productNames[0] || fallbackName || "Skincare Product";
+    
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const isAM = timeOfDay === "AM";
+      const targetRoutine = isAM ? [...routineAM] : [...routinePM];
+      
+      // Avoid duplicate adds
+      if (targetRoutine.some(item => item.name === finalName)) {
+        alert(`${finalName} is already in your ${timeOfDay} routine!`);
+        return;
+      }
+      
+      const newProduct = {
+        id: crypto.randomUUID(),
+        name: finalName,
+        completed: false
+      };
+      
+      const updated = [...targetRoutine, newProduct];
+      if (isAM) {
+        setRoutineAM(updated);
+        await updateDoc(userDocRef, { routineAM: updated });
+      } else {
+        setRoutinePM(updated);
+        await updateDoc(userDocRef, { routinePM: updated });
+      }
+      alert(`Added ${finalName} to your ${timeOfDay} routine!`);
+    } catch (err) {
+      console.error("Error adding product to routine:", err);
+    }
+  }
+
   if (!hasFirebaseConfig) {
     return <MissingFirebaseConfig />;
   }
@@ -327,6 +502,118 @@ function App() {
 
   if (!user) {
     return <AuthView />;
+  }
+
+  async function handleOnboardingSubmit(e) {
+    e.preventDefault();
+    if (!skinType) return;
+    setOnboardingSaving(true);
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      await setDoc(userDocRef, {
+        skinType,
+        skinConcerns,
+        preferences,
+        age: age || "",
+      }, { merge: true });
+      setNeedsOnboarding(false);
+    } catch (err) {
+      console.error("Error saving onboarding details:", err);
+    } finally {
+      setOnboardingSaving(false);
+    }
+  }
+
+  if (needsOnboarding) {
+    return (
+      <main className="app-shell auth-shell">
+        <div className="auth-bg" aria-hidden="true">
+          <div className="auth-blob auth-blob-1" />
+          <div className="auth-blob auth-blob-2" />
+        </div>
+        <div className="auth-card onboarding-card">
+          <div className="auth-hero onboarding-hero" aria-hidden="true">
+            <div className="auth-hero-glow" />
+            <div className="auth-hero-content">
+              <div className="auth-hero-mark"><Sparkles size={32} /></div>
+              <h2 className="auth-hero-title">Customise Your<br />Skincare Journey</h2>
+              <p className="auth-hero-sub">We tailor recommendations using active ingredients suited exactly for your profile.</p>
+            </div>
+          </div>
+          <div className="auth-form-panel">
+            <form className="auth-form onboarding-form" onSubmit={handleOnboardingSubmit}>
+              <div className="auth-form-heading">
+                <h1>Skin Profile</h1>
+                <p>Help us customize your recommendations.</p>
+              </div>
+
+              <div className="field">
+                <label className="field-label">What is your skin type? *</label>
+                <div className="skin-select-grid">
+                  {["Dry", "Oily", "Combination", "Sensitive", "Normal"].map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      className={`skin-chip-btn ${skinType === type ? "active" : ""}`}
+                      onClick={() => setSkinType(type)}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="onboard-age" className="field-label">How old are you?</label>
+                <div className="field-control">
+                  <UserRound size={16} className="field-icon" />
+                  <input
+                    id="onboard-age"
+                    type="number"
+                    value={age}
+                    onChange={(e) => setAge(e.target.value)}
+                    placeholder="Enter your age"
+                    min="1"
+                    max="120"
+                  />
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="onboard-concerns" className="field-label">Any skin concerns or diseases? (e.g. Acne, Eczema, Rosacea)</label>
+                <div className="field-control">
+                  <Sparkles size={16} className="field-icon" />
+                  <input
+                    id="onboard-concerns"
+                    value={skinConcerns}
+                    onChange={(e) => setSkinConcerns(e.target.value)}
+                    placeholder="Acne, Eczema, Rosacea, Psoriasis..."
+                  />
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="onboard-prefs" className="field-label">Preferences (e.g. Cruelty-free, Fragrance-free)</label>
+                <div className="field-control">
+                  <Lock size={16} className="field-icon" />
+                  <input
+                    id="onboard-prefs"
+                    value={preferences}
+                    onChange={(e) => setPreferences(e.target.value)}
+                    placeholder="Cruelty-free, vegan, budget caps..."
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="auth-submit" disabled={!skinType || onboardingSaving}>
+                {onboardingSaving ? <Loader2 size={18} className="spin" /> : <Send size={18} />}
+                <span>{onboardingSaving ? "Saving profile..." : "Get Started"}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -376,104 +663,169 @@ function App() {
               </div>
             ))}
           </div>
-        </aside>
 
-        <section className="chat-workspace" aria-label="Skincare assistant chat">
-          <header className="topbar">
-            <div className="brand-lockup">
-              <div className="brand-mark" aria-hidden="true">
-                <Sparkles size={20} />
-              </div>
-            <div>
-              <h1>Skincare Assistant</h1>
-              <p>{statusText} · {user.email}</p>
-            </div>
-          </div>
-            <div className="topbar-actions">
-              <button className="icon-button" type="button" onClick={resetChat} title="Clear chat memory">
-                <RotateCcw size={18} />
-              </button>
-              <button className="icon-button" type="button" onClick={handleSignOut} title="Sign out">
-                <LogOut size={18} />
-              </button>
-            </div>
-          </header>
-
-          <div className="prompt-strip" aria-label="Starter prompts">
-            {starterPrompts.map((prompt) => (
+          <div className="history-footer flex-column">
+            <div className="tab-nav-buttons">
               <button
                 type="button"
-                key={prompt}
-                className="prompt-chip"
-                onClick={() => sendMessage(prompt)}
-                disabled={isLoading}
+                className={`tab-nav-btn ${activeTab === "chat" ? "active" : ""}`}
+                onClick={() => setActiveTab("chat")}
               >
-                {prompt}
+                Chat
               </button>
-            ))}
-          </div>
-
-          <div className="messages" aria-live="polite">
-            {messages.map((message) => (
-              <article className={`message-row ${message.role}`} key={message.id}>
-                <div className="avatar" aria-hidden="true">
-                  {message.role === "assistant" ? <Bot size={18} /> : <UserRound size={18} />}
-                </div>
-                <div className="bubble">
-                  {message.content.split("\n").map((line, index) => (
-                    <p key={`${message.id}-${index}`}>{line}</p>
-                  ))}
-                </div>
-              </article>
-            ))}
-
-            {isLoading && (
-              <article className="message-row assistant">
-                <div className="avatar" aria-hidden="true">
-                  <Bot size={18} />
-                </div>
-                <div className="bubble loading-bubble">
-                  <Loader2 size={18} className="spin" />
-                  <span>
-                    {isSlowStart
-                      ? "Still working. The first reply can take a minute while models warm up..."
-                      : "Looking through matching products..."}
-                  </span>
-                </div>
-              </article>
-            )}
-            <div ref={scrollRef} />
-          </div>
-
-          {error && (
-            <div className="error-bar" role="alert">
-              {error}
+              <button
+                type="button"
+                className={`tab-nav-btn ${activeTab === "routine" ? "active" : ""}`}
+                onClick={() => setActiveTab("routine")}
+              >
+                Routine
+              </button>
+              <button
+                type="button"
+                className={`tab-nav-btn ${activeTab === "analyzer" ? "active" : ""}`}
+                onClick={() => setActiveTab("analyzer")}
+              >
+                Analyzer
+              </button>
             </div>
-          )}
+            <button type="button" className="footer-link" onClick={() => setShowPrivacy(true)}>
+              Privacy Policy
+            </button>
+          </div>
+        </aside>
 
-          <form className="composer" onSubmit={handleSubmit}>
-            <button className="icon-button subtle" type="button" onClick={() => setInput("")} title="Clear input">
-              <Eraser size={18} />
-            </button>
-            <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  sendMessage();
-                }
-              }}
-              placeholder="Ask for products, then follow up with budget..."
-              rows={1}
-            />
-            <button className="send-button" type="submit" disabled={!canSend} title="Send message">
-              <Send size={18} />
-              <span>Send</span>
-            </button>
-          </form>
-        </section>
+        {activeTab === "chat" && (
+          <section className="chat-workspace" aria-label="Skincare assistant chat">
+            <header className="topbar">
+              <div className="brand-lockup">
+                <div className="brand-mark" aria-hidden="true">
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h1>Skincare Assistant</h1>
+                  <p>{statusText} · {skinType || "No Profile"} · {user.email}</p>
+                </div>
+              </div>
+              <div className="topbar-actions">
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => setDarkTheme(!darkTheme)}
+                  title="Toggle Light/Dark Theme"
+                >
+                  <Sparkles size={18} />
+                </button>
+                <button className="icon-button" type="button" onClick={resetChat} title="Clear chat memory">
+                  <RotateCcw size={18} />
+                </button>
+                <button className="icon-button" type="button" onClick={handleSignOut} title="Sign out">
+                  <LogOut size={18} />
+                </button>
+              </div>
+            </header>
+
+            <div className="prompt-strip" aria-label="Starter prompts">
+              {starterPrompts.map((prompt) => (
+                <button
+                  type="button"
+                  key={prompt}
+                  className="prompt-chip"
+                  onClick={() => sendMessage(prompt)}
+                  disabled={isLoading}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
+            <div className="messages" aria-live="polite">
+              {messages.map((message) => (
+                <article className={`message-row ${message.role}`} key={message.id}>
+                  <div className="avatar" aria-hidden="true">
+                    {message.role === "assistant" ? <Bot size={18} /> : <UserRound size={18} />}
+                  </div>
+                  <div className="bubble">
+                    {message.content.split("\n").map((line, index) => (
+                      <p key={`${message.id}-${index}`}>{line}</p>
+                    ))}
+                  </div>
+                </article>
+              ))}
+
+              {isLoading && (
+                <article className="message-row assistant">
+                  <div className="avatar" aria-hidden="true">
+                    <Bot size={18} />
+                  </div>
+                  <div className="bubble loading-bubble">
+                    <Loader2 size={18} className="spin" />
+                    <span>
+                      {isSlowStart
+                        ? "Still working. The first reply can take a minute while models warm up..."
+                        : "Looking through matching products..."}
+                    </span>
+                  </div>
+                </article>
+              )}
+              <div ref={scrollRef} />
+            </div>
+
+            {error && (
+              <div className="error-bar" role="alert">
+                {error}
+              </div>
+            )}
+
+            <form className="composer" onSubmit={handleSubmit}>
+              <button className="icon-button subtle" type="button" onClick={() => setInput("")} title="Clear input">
+                <Eraser size={18} />
+              </button>
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    sendMessage();
+                  }
+                }}
+                placeholder="Ask for products, then follow up with budget..."
+                rows={1}
+              />
+              <button className="send-button" type="submit" disabled={!canSend} title="Send message">
+                <Send size={18} />
+                <span>Send</span>
+              </button>
+            </form>
+          </section>
+        )}
+
+        {activeTab === "routine" && (
+          <RoutineTrackerPanel
+            user={user}
+            routineAM={routineAM}
+            routinePM={routinePM}
+            setRoutineAM={setRoutineAM}
+            setRoutinePM={setRoutinePM}
+            setDarkTheme={setDarkTheme}
+            darkTheme={darkTheme}
+            handleSignOut={handleSignOut}
+            skinType={skinType}
+            skinConcerns={skinConcerns}
+            age={age}
+          />
+        )}
+
+        {activeTab === "analyzer" && (
+          <IngredientAnalyzerPanel
+            setDarkTheme={setDarkTheme}
+            darkTheme={darkTheme}
+            handleSignOut={handleSignOut}
+          />
+        )}
       </div>
+
+      <PrivacyPolicyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </main>
   );
 }
@@ -531,6 +883,7 @@ function AuthView() {
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const isSignup = mode === "signup";
 
   async function saveUserLogin(firebaseUser, extra = {}) {
@@ -547,30 +900,7 @@ function AuthView() {
     );
   }
 
-  useEffect(() => {
-    let isActive = true;
 
-    async function completeGoogleRedirect() {
-      try {
-        const credential = await getRedirectResult(auth);
-        if (!isActive || !credential?.user) return;
-
-        await saveUserLogin(credential.user, {
-          displayName: credential.user.displayName || "",
-        });
-      } catch (err) {
-        if (isActive) {
-          setAuthError(authErrorMessage(err));
-        }
-      }
-    }
-
-    completeGoogleRedirect();
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -601,122 +931,206 @@ function AuthView() {
 
   async function handleGoogleSignIn() {
     setAuthError("");
-    setIsSubmitting(true);
+    setGoogleLoading(true);
 
     try {
-      await signInWithRedirect(auth, googleProvider);
+      const credential = await signInWithPopup(auth, googleProvider);
+      await saveUserLogin(credential.user, {
+        displayName: credential.user.displayName || "",
+      });
     } catch (err) {
-      setAuthError(authErrorMessage(err));
-      setIsSubmitting(false);
+      if (err.code === "auth/account-exists-with-different-credential") {
+        setAuthError("This email is already registered with a password. Please sign in using your email and password.");
+      } else {
+        setAuthError(authErrorMessage(err));
+      }
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
+  const anySubmitting = isSubmitting || googleLoading;
+
   return (
-    <main className="app-shell">
-      <section className="auth-panel" aria-label="Account access">
-        <div className="auth-brand">
-          <div className="brand-mark" aria-hidden="true">
-            <Sparkles size={22} />
-          </div>
-          <div>
-            <h1>Skincare Assistant</h1>
-            <p>{isSignup ? "Create an account to start chatting." : "Sign in to continue your skincare chats."}</p>
+    <main className="auth-shell" aria-label="Account access">
+      {/* Decorative animated background blobs */}
+      <div className="auth-bg" aria-hidden="true">
+        <div className="auth-blob auth-blob-1" />
+        <div className="auth-blob auth-blob-2" />
+        <div className="auth-blob auth-blob-3" />
+      </div>
+
+      <div className="auth-card">
+        {/* Left decorative panel */}
+        <div className="auth-hero" aria-hidden="true">
+          <div className="auth-hero-glow" />
+          <div className="auth-hero-content">
+            <div className="auth-hero-mark">
+              <Sparkles size={32} />
+            </div>
+            <h2 className="auth-hero-title">Your skin,<br />expertly guided.</h2>
+            <p className="auth-hero-sub">AI-powered skincare recommendations tailored to your unique needs and budget.</p>
+            <ul className="auth-feature-list">
+              <li><span className="auth-feature-dot" />Personalised product picks</li>
+              <li><span className="auth-feature-dot" />Budget-aware suggestions</li>
+              <li><span className="auth-feature-dot" />Follow-up context memory</li>
+            </ul>
           </div>
         </div>
 
-        <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
-          <button
-            type="button"
-            className={!isSignup ? "active" : ""}
-            onClick={() => {
-              setMode("login");
-              setAuthError("");
-            }}
-          >
-            <LogIn size={17} />
-            <span>Login</span>
-          </button>
-          <button
-            type="button"
-            className={isSignup ? "active" : ""}
-            onClick={() => {
-              setMode("signup");
-              setAuthError("");
-            }}
-          >
-            <UserPlus size={17} />
-            <span>Sign up</span>
-          </button>
-        </div>
+        {/* Right form panel */}
+        <div className="auth-form-panel">
+          <div className="auth-form-inner">
+            <div className="auth-mobile-brand">
+              <div className="brand-mark" aria-hidden="true"><Sparkles size={18} /></div>
+              <span>Skincare Assistant</span>
+            </div>
 
-        <form className="auth-form" onSubmit={handleAuthSubmit}>
-          {isSignup && (
-            <label className="field">
-              <span>Name</span>
-              <div className="field-control">
-                <UserRound size={18} />
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Your name"
-                  autoComplete="name"
-                />
+            <div className="auth-form-heading">
+              <h1>{isSignup ? "Create account" : "Welcome back"}</h1>
+              <p>{isSignup ? "Join thousands discovering better skincare." : "Sign in to continue your chats."}</p>
+            </div>
+
+            {/* Google sign-in — prominent at top */}
+            <button
+              id="google-signin-btn"
+              className="google-auth-button"
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={anySubmitting}
+              aria-busy={googleLoading}
+            >
+              {googleLoading
+                ? <Loader2 size={18} className="spin" />
+                : <GoogleMark />}
+              <span>{googleLoading ? "Redirecting…" : "Continue with Google"}</span>
+            </button>
+
+            <div className="auth-divider"><span>or continue with email</span></div>
+
+            <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
+              <button
+                id="tab-login"
+                type="button"
+                role="tab"
+                aria-selected={!isSignup}
+                className={!isSignup ? "active" : ""}
+                onClick={() => { setMode("login"); setAuthError(""); }}
+              >
+                <LogIn size={15} />
+                <span>Login</span>
+              </button>
+              <button
+                id="tab-signup"
+                type="button"
+                role="tab"
+                aria-selected={isSignup}
+                className={isSignup ? "active" : ""}
+                onClick={() => { setMode("signup"); setAuthError(""); }}
+              >
+                <UserPlus size={15} />
+                <span>Sign up</span>
+              </button>
+            </div>
+
+            <form className="auth-form" onSubmit={handleAuthSubmit} noValidate>
+              <div className={`auth-fields-wrapper ${isSignup ? "signup-mode" : ""}`}>
+                {isSignup && (
+                  <div className="field">
+                    <label htmlFor="auth-name" className="field-label">Full name</label>
+                    <div className="field-control">
+                      <UserRound size={16} className="field-icon" />
+                      <input
+                        id="auth-name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Your name"
+                        autoComplete="name"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="field">
+                  <label htmlFor="auth-email" className="field-label">Email address</label>
+                  <div className="field-control">
+                    <Mail size={16} className="field-icon" />
+                    <input
+                      id="auth-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="field">
+                  <div className="field-label-row">
+                    <label htmlFor="auth-password" className="field-label">Password</label>
+                    {!isSignup && (
+                      <span className="field-hint">6+ characters</span>
+                    )}
+                  </div>
+                  <div className="field-control">
+                    <Lock size={16} className="field-icon" />
+                    <input
+                      id="auth-password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={isSignup ? "Create a password" : "Your password"}
+                      autoComplete={isSignup ? "new-password" : "current-password"}
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                </div>
               </div>
-            </label>
-          )}
 
-          <label className="field">
-            <span>Email</span>
-            <div className="field-control">
-              <Mail size={18} />
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-                autoComplete="email"
-                required
-              />
+              {authError && (
+                <div className="error-bar auth-error" role="alert">
+                  {authError}
+                </div>
+              )}
+
+              <button
+                id="auth-submit-btn"
+                className="auth-submit"
+                type="submit"
+                disabled={anySubmitting}
+                aria-busy={isSubmitting}
+              >
+                {isSubmitting
+                  ? <Loader2 size={18} className="spin" />
+                  : isSignup ? <UserPlus size={18} /> : <LogIn size={18} />}
+                <span>
+                  {isSubmitting ? "Please wait…" : isSignup ? "Create account" : "Sign in"}
+                </span>
+              </button>
+            </form>
+
+            <p className="auth-switch">
+              {isSignup ? "Already have an account? " : "Don\'t have an account? "}
+              <button
+                type="button"
+                className="auth-switch-link"
+                onClick={() => { setMode(isSignup ? "login" : "signup"); setAuthError(""); }}
+              >
+                {isSignup ? "Sign in" : "Sign up free"}
+              </button>
+            </p>
+
+            <div className="auth-footer-links">
+              <button type="button" className="footer-link" onClick={() => window.showPrivacyPolicy()}>
+                Privacy Policy
+              </button>
             </div>
-          </label>
-
-          <label className="field">
-            <span>Password</span>
-            <div className="field-control">
-              <Lock size={18} />
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="At least 6 characters"
-                autoComplete={isSignup ? "new-password" : "current-password"}
-                minLength={6}
-                required
-              />
-            </div>
-          </label>
-
-          {authError && (
-            <div className="error-bar auth-error" role="alert">
-              {authError}
-            </div>
-          )}
-
-          <button className="auth-submit" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 size={18} className="spin" /> : isSignup ? <UserPlus size={18} /> : <LogIn size={18} />}
-            <span>{isSubmitting ? "Please wait" : isSignup ? "Create account" : "Login"}</span>
-          </button>
-        </form>
-
-        <div className="auth-divider">
-          <span>or</span>
+          </div>
         </div>
-
-        <button className="google-auth-button" type="button" onClick={handleGoogleSignIn} disabled={isSubmitting}>
-          {isSubmitting ? <Loader2 size={18} className="spin" /> : <GoogleMark />}
-          <span>Continue with Google</span>
-        </button>
-      </section>
+      </div>
     </main>
   );
 }
@@ -765,6 +1179,646 @@ function authErrorMessage(err) {
     default:
       return err?.message || "Authentication failed. Please try again.";
   }
+}
+
+function RoutineTrackerPanel({
+  user,
+  routineAM,
+  routinePM,
+  setRoutineAM,
+  setRoutinePM,
+  setDarkTheme,
+  darkTheme,
+  handleSignOut,
+  skinType,
+  skinConcerns,
+  age,
+}) {
+  const [newItemName, setNewItemName] = useState("");
+  const [activeTime, setActiveTime] = useState("AM");
+
+  async function handleAddItem(e) {
+    e.preventDefault();
+    if (!newItemName.trim() || !user) return;
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const isAM = activeTime === "AM";
+      const currentList = isAM ? routineAM : routinePM;
+      const updatedList = [...currentList, { id: crypto.randomUUID(), name: newItemName.trim(), completed: false }];
+      if (isAM) {
+        setRoutineAM(updatedList);
+        await updateDoc(userDocRef, { routineAM: updatedList });
+      } else {
+        setRoutinePM(updatedList);
+        await updateDoc(userDocRef, { routinePM: updatedList });
+      }
+      setNewItemName("");
+    } catch (err) {
+      console.error("Error adding item:", err);
+    }
+  }
+
+  async function handleToggleItem(id, timeOfDay) {
+    if (!user) return;
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const isAM = timeOfDay === "AM";
+      const currentList = isAM ? routineAM : routinePM;
+      const updatedList = currentList.map(item => item.id === id ? { ...item, completed: !item.completed } : item);
+      if (isAM) {
+        setRoutineAM(updatedList);
+        await updateDoc(userDocRef, { routineAM: updatedList });
+      } else {
+        setRoutinePM(updatedList);
+        await updateDoc(userDocRef, { routinePM: updatedList });
+      }
+    } catch (err) {
+      console.error("Error toggling item:", err);
+    }
+  }
+
+  async function handleDeleteItem(id, timeOfDay) {
+    if (!user) return;
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const isAM = timeOfDay === "AM";
+      const currentList = isAM ? routineAM : routinePM;
+      const updatedList = currentList.filter(item => item.id !== id);
+      if (isAM) {
+        setRoutineAM(updatedList);
+        await updateDoc(userDocRef, { routineAM: updatedList });
+      } else {
+        setRoutinePM(updatedList);
+        await updateDoc(userDocRef, { routinePM: updatedList });
+      }
+    } catch (err) {
+      console.error("Error deleting item:", err);
+    }
+  }
+
+  const activeList = activeTime === "AM" ? routineAM : routinePM;
+
+  return (
+    <section className="chat-workspace" aria-label="Skincare routines">
+      <header className="topbar">
+        <div className="brand-lockup">
+          <div className="brand-mark" aria-hidden="true"><Sparkles size={20} /></div>
+          <div>
+            <h1>Daily Routines</h1>
+            <p>Track your AM & PM product routines</p>
+          </div>
+        </div>
+        <div className="topbar-actions">
+          <button className="icon-button" type="button" onClick={() => setDarkTheme(!darkTheme)} title="Theme">
+            <Sparkles size={18} />
+          </button>
+          <button className="icon-button" type="button" onClick={handleSignOut} title="Sign out">
+            <LogOut size={18} />
+          </button>
+        </div>
+      </header>
+
+      <div className="routine-nav-tabs">
+        <button
+          type="button"
+          className={`routine-nav-btn ${activeTime === "AM" ? "active" : ""}`}
+          onClick={() => setActiveTime("AM")}
+        >
+          ☀️ AM Routine
+        </button>
+        <button
+          type="button"
+          className={`routine-nav-btn ${activeTime === "PM" ? "active" : ""}`}
+          onClick={() => setActiveTime("PM")}
+        >
+          🌙 PM Routine
+        </button>
+      </div>
+
+      <div className="routine-body-container">
+        <form className="routine-add-form" onSubmit={handleAddItem}>
+          <input
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            placeholder="Add new routine product..."
+            required
+          />
+          <button type="submit" className="routine-add-btn">Add</button>
+        </form>
+
+        <div className="routine-items-list">
+          {activeList.length === 0 ? (
+            <p className="empty-routine-text">No products in this routine yet. Add them above or check out our suggested routine below.</p>
+          ) : (
+            activeList.map(item => (
+              <div key={item.id} className={`routine-item-row ${item.completed ? "completed" : ""}`}>
+                <label className="routine-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={item.completed}
+                    onChange={() => handleToggleItem(item.id, activeTime)}
+                  />
+                  <span className="routine-item-name">{item.name}</span>
+                </label>
+                <button
+                  type="button"
+                  className="routine-delete-btn"
+                  onClick={() => handleDeleteItem(item.id, activeTime)}
+                  title="Remove product"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <RoutineSuggestorSection
+          user={user}
+          routineAM={routineAM}
+          routinePM={routinePM}
+          setRoutineAM={setRoutineAM}
+          setRoutinePM={setRoutinePM}
+          skinType={skinType}
+          skinConcerns={skinConcerns}
+          age={age}
+        />
+      </div>
+    </section>
+  );
+}
+
+function IngredientAnalyzerPanel({ setDarkTheme, darkTheme, handleSignOut }) {
+  const [ingredientsText, setIngredientsText] = useState("");
+  const [analysisResults, setAnalysisResults] = useState(null);
+  const [dbConflicts, setDbConflicts] = useState([]);
+  const [unsafeList, setUnsafeList] = useState([]);
+
+  // Predefined conflict dictionary for standard skincare actives
+  const ACTIVES_DICTS = [
+    { name: "Retinol / Retinoids", patterns: [/retinol/i, /retinoid/i, /tretinoin/i, /adapalene/i] },
+    { name: "Vitamin C (L-Ascorbic Acid)", patterns: [/ascorbic/i, /vitamin c/i] },
+    { name: "AHAs (Glycolic/Lactic Acid)", patterns: [/glycolic/i, /lactic/i, /alpha hydroxy/i, /aha/i, /glycolic acid/i] },
+    { name: "BHAs (Salicylic Acid)", patterns: [/salicylic/i, /bha/i, /beta hydroxy/i, /salicylic acid/i] },
+    { name: "Niacinamide", patterns: [/niacinamide/i, /vitamin b3/i] },
+    { name: "Benzoyl Peroxide", patterns: [/benzoyl peroxide/i, /benzoyl/i] }
+  ];
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [conflictRes, unsafeRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/conflicts`),
+          fetch(`${API_BASE_URL}/api/unsafe-ingredients`)
+        ]);
+        if (conflictRes.ok) {
+          const cData = await conflictRes.json();
+          setDbConflicts(cData.conflicts || []);
+        }
+        if (unsafeRes.ok) {
+          const uData = await unsafeRes.json();
+          setUnsafeList(uData.unsafe_ingredients || []);
+        }
+      } catch (err) {
+        console.error("Failed to load safety data:", err);
+      }
+    }
+    loadData();
+  }, []);
+
+  function handleAnalyze() {
+    if (!ingredientsText.trim()) return;
+
+    const detected = [];
+    ACTIVES_DICTS.forEach(active => {
+      if (active.patterns.some(regex => regex.test(ingredientsText))) {
+        detected.push(active.name);
+      }
+    });
+
+    // Match unsafe/banned ingredients
+    const matchedUnsafe = [];
+    unsafeList.forEach(item => {
+      const isMatched = item.patterns.some(pat => {
+        const regex = new RegExp(pat, "i");
+        return regex.test(ingredientsText);
+      });
+      if (isMatched) {
+        matchedUnsafe.push(item);
+      }
+    });
+
+    const activeConflicts = [];
+    const sourceConflicts = dbConflicts.length > 0 ? dbConflicts : [
+      {
+        actives: ["Retinol / Retinoids", "AHAs (Glycolic/Lactic Acid)"],
+        severity: "High Danger",
+        reason: "Both exfoliate the skin at different levels. Mixing them causes extreme dryness, skin barrier peeling, irritation, and redness. Use them on alternate nights instead."
+      },
+      {
+        actives: ["Retinol / Retinoids", "BHAs (Salicylic Acid)"],
+        severity: "High Danger",
+        reason: "Retinol speeds up skin cell turnover while BHA penetrates deep to exfoliate pores. Combining them compromises the skin barrier. Space them out across different days."
+      },
+      {
+        actives: ["Vitamin C (L-Ascorbic Acid)", "AHAs (Glycolic/Lactic Acid)"],
+        severity: "Moderate Danger",
+        reason: "Both are highly acidic ingredients. Layering them can destabilize the pH balance, render both less effective, and trigger stinging or irritation."
+      },
+      {
+        actives: ["Retinol / Retinoids", "Vitamin C (L-Ascorbic Acid)"],
+        severity: "Moderate Danger",
+        reason: "Retinol functions best at a neutral pH (5.5 - 6.0), while Vitamin C requires an acidic pH (3.5 or lower). Apply Vitamin C in the AM and Retinol in the PM."
+      }
+    ];
+
+    for (let i = 0; i < detected.length; i++) {
+      for (let j = i + 1; j < detected.length; j++) {
+        const itemA = detected[i];
+        const itemB = detected[j];
+        const match = sourceConflicts.find(conflict => 
+          conflict.actives.some(act => itemA.toLowerCase().includes(act.toLowerCase().split(" (")[0].split(" /")[0])) &&
+          conflict.actives.some(act => itemB.toLowerCase().includes(act.toLowerCase().split(" (")[0].split(" /")[0]))
+        );
+        if (match) {
+          activeConflicts.push(match);
+        }
+      }
+    }
+
+    setAnalysisResults({
+      detectedList: detected,
+      conflictsList: activeConflicts,
+      unsafeMatches: matchedUnsafe
+    });
+  }
+
+  return (
+    <section className="chat-workspace" aria-label="Ingredient analyzer">
+      <header className="topbar">
+        <div className="brand-lockup">
+          <div className="brand-mark" aria-hidden="true"><Sparkles size={20} /></div>
+          <div>
+            <h1>Ingredient Safety Analyzer</h1>
+            <p>Paste ingredient lists to check active ingredient conflicts and banned substances</p>
+          </div>
+        </div>
+        <div className="topbar-actions">
+          <button className="icon-button" type="button" onClick={() => setDarkTheme(!darkTheme)} title="Theme">
+            <Sparkles size={18} />
+          </button>
+          <button className="icon-button" type="button" onClick={handleSignOut} title="Sign out">
+            <LogOut size={18} />
+          </button>
+        </div>
+      </header>
+
+      <div className="analyzer-body-container">
+        <div className="analyzer-card-layout">
+          <div className="analyzer-input-box">
+            <label htmlFor="raw-ingredients" className="field-label">Ingredients list</label>
+            <textarea
+              id="raw-ingredients"
+              rows={6}
+              value={ingredientsText}
+              onChange={(e) => setIngredientsText(e.target.value)}
+              placeholder="Paste active ingredients or product contents list here (e.g. Aqua, Retinol, DMDM Hydantoin, Triclosan...)"
+            />
+            <button type="button" className="auth-submit" onClick={handleAnalyze}>
+              Analyze Actives & Safety
+            </button>
+          </div>
+
+          {analysisResults && (
+            <div className="analyzer-output-results">
+              <h3>Analysis Output</h3>
+              
+              <div className="detected-actives-row">
+                <strong>Detected Actives:</strong>
+                {analysisResults.detectedList.length === 0 ? (
+                  <span className="no-actives-text">No active chemical ingredients detected.</span>
+                ) : (
+                  analysisResults.detectedList.map(item => (
+                    <span key={item} className="active-item-badge">{item}</span>
+                  ))
+                )}
+              </div>
+
+              {/* TOXIC BANNED INGREDIENTS LIST WARNING */}
+              {analysisResults.unsafeMatches && analysisResults.unsafeMatches.length > 0 && (
+                <div style={{ marginTop: "16px", marginBottom: "16px" }}>
+                  <strong style={{ color: "#d9534f", fontSize: "13px", display: "block", marginBottom: "8px" }}>⚠️ Banned / Toxic Substances Detected:</strong>
+                  {analysisResults.unsafeMatches.map((item, idx) => (
+                    <div key={idx} className="conflict-banner-row high-danger" style={{ marginBottom: "8px" }}>
+                      <div className="conflict-badge">Toxic Warning</div>
+                      <div className="conflict-actives-involved"><strong>{item.name}</strong></div>
+                      <p className="conflict-reason-text">{item.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="conflicts-output-list">
+                {analysisResults.conflictsList.length === 0 ? (
+                  <div className="success-banner">
+                    🎉 Safe Routine! No hazardous conflicts detected among active ingredients in this combination.
+                  </div>
+                ) : (
+                  analysisResults.conflictsList.map((conflict, idx) => (
+                    <div key={idx} className={`conflict-banner-row ${conflict.severity.replace(" ", "-").toLowerCase()}`}>
+                      <div className="conflict-badge">{conflict.severity}</div>
+                      <div className="conflict-actives-involved">
+                        <strong>{conflict.actives.join(" + ")}</strong>
+                      </div>
+                      <p className="conflict-reason-text">{conflict.reason}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RoutineSuggestorSection({ user, routineAM, routinePM, setRoutineAM, setRoutinePM, skinType, skinConcerns, age }) {
+  const [dynamicRoutine, setDynamicRoutine] = useState(null);
+  const [activeConflicts, setActiveConflicts] = useState([]);
+  const [suggestedActives, setSuggestedActives] = useState([]);
+  const [hasGenerated, setHasGenerated] = useState(false);
+  const [dbConflicts, setDbConflicts] = useState([]);
+
+  useEffect(() => {
+    async function loadConflicts() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/conflicts`);
+        if (res.ok) {
+          const data = await res.json();
+          setDbConflicts(data.conflicts || []);
+        }
+      } catch (err) {
+        console.error("Failed to load conflicts in suggestor:", err);
+      }
+    }
+    loadConflicts();
+  }, []);
+
+  // Map user age number to the category groups in the database
+  const getAgeGroup = (ageVal) => {
+    const numericAge = parseInt(ageVal, 10);
+    if (isNaN(numericAge)) return "20-35";
+    if (numericAge < 20) return "Under 20";
+    if (numericAge <= 35) return "20-35";
+    if (numericAge <= 50) return "36-50";
+    return "50+";
+  };
+
+  async function handleGenerate() {
+    const ageGroup = getAgeGroup(age);
+    const resolvedType = skinType || "Normal";
+    const resolvedConcern = skinConcerns || "None";
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/suggest-routine`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skin_type: resolvedType,
+          concern: resolvedConcern,
+          age_group: ageGroup,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to query the skincare treatment database.");
+      }
+
+      const data = await response.json();
+      const dbSuggestions = data.suggestions || [];
+
+      // Extract unique ingredients from database suggestions
+      const actives = [];
+      dbSuggestions.forEach((sug) => {
+        const parts = sug.ingredients.split(/[+,]/);
+        parts.forEach((p) => {
+          const cleaned = p.trim();
+          if (cleaned) {
+            actives.push(cleaned);
+          }
+        });
+      });
+
+      const uniqueActives = [...new Set(actives)];
+      setSuggestedActives(uniqueActives);
+
+      // Perform safety check on suggested actives
+      const conflicts = [];
+      const sourceConflicts = dbConflicts.length > 0 ? dbConflicts : [
+        {
+          actives: ["Retinol / Retinoids", "Salicylic Acid (BHA)"],
+          severity: "High Danger",
+          reason: "Combining Retinol and Salicylic Acid simultaneously causes extreme peeling, skin irritation, and barrier damage. Use them on alternate days."
+        },
+        {
+          actives: ["Retinol / Retinoids", "Vitamin C (L-Ascorbic Acid)"],
+          severity: "Moderate Danger",
+          reason: "Retinol functions best at neutral pH, while Vitamin C requires acidic pH. Apply Vitamin C in the AM and Retinol in the PM."
+        }
+      ];
+
+      for (let i = 0; i < uniqueActives.length; i++) {
+        for (let j = i + 1; j < uniqueActives.length; j++) {
+          const itemA = uniqueActives[i];
+          const itemB = uniqueActives[j];
+          const match = sourceConflicts.find((conflict) =>
+            conflict.actives.some((act) => itemA.toLowerCase().includes(act.toLowerCase().split(" (")[0].split(" /")[0])) &&
+            conflict.actives.some((act) => itemB.toLowerCase().includes(act.toLowerCase().split(" (")[0].split(" /")[0]))
+          );
+          if (match) {
+            conflicts.push(match);
+          }
+        }
+      }
+
+      // Age limit validation (e.g. Under 20 shouldn't use Retinol)
+      const hasRetinol = uniqueActives.some((a) => a.toLowerCase().includes("retinol") || a.toLowerCase().includes("retinoid"));
+      if (ageGroup === "Under 20" && hasRetinol) {
+        conflicts.push({
+          actives: ["Retinol / Retinoids", "Under 20 Age Group"],
+          severity: "Age Warning",
+          reason: "Retinol cell-turnover acceleration is not recommended for skin under 20 unless prescribed. Swapped with gentle alternatives."
+        });
+      }
+
+      // Filter out retinol for Under 20 safety
+      const safeActives = ageGroup === "Under 20"
+        ? uniqueActives.filter((a) => !a.toLowerCase().includes("retinol") && !a.toLowerCase().includes("retinoid"))
+        : uniqueActives;
+
+      setActiveConflicts(conflicts);
+
+      // Generate structured routine steps from database actives
+      const amSteps = [];
+      const pmSteps = [];
+
+      // AM Cleansing
+      if (resolvedConcern.toLowerCase().includes("rosacea") || resolvedConcern.toLowerCase().includes("eczema") || resolvedType === "Sensitive") {
+        amSteps.push({ name: "☀️ Soothing Non-foaming Cream Cleanser" });
+      } else {
+        amSteps.push({ name: "☀️ Gentle Daily Gel Wash" });
+      }
+
+      // AM Treatment
+      safeActives.forEach((active) => {
+        const lower = active.toLowerCase();
+        if (lower.includes("vitamin c")) {
+          amSteps.push({ name: `☀️ Vitamin C Protective Serum (DB Match: ${active})` });
+        } else if (lower.includes("hyaluronic")) {
+          amSteps.push({ name: `☀️ Hyaluronic Acid Hydrating Serum (DB Match: ${active})` });
+        } else if (lower.includes("zinc") || lower.includes("benzoyl")) {
+          amSteps.push({ name: `☀️ Acne Clearing Fluid (DB Match: ${active})` });
+        }
+      });
+
+      // AM Protection
+      if (resolvedType === "Dry") {
+        amSteps.push({ name: "☀️ Daily Nourishing Cream Moisturiser" });
+      } else {
+        amSteps.push({ name: "☀️ Lightweight Hydrating Lotion" });
+      }
+      amSteps.push({ name: "☀️ Broad-spectrum Protective Sunscreen (SPF 50+)" });
+
+      // PM Cleansing
+      pmSteps.push({ name: "🌙 Gentle Cleanser / Micellar Wash" });
+
+      // PM Treatment
+      safeActives.forEach((active) => {
+        const lower = active.toLowerCase();
+        if (lower.includes("retinol") || lower.includes("retinoid")) {
+          pmSteps.push({ name: `🌙 Retinol Night Support Serum (DB Match: ${active})` });
+        } else if (lower.includes("salicylic") || lower.includes("bha")) {
+          pmSteps.push({ name: `🌙 BHA Exfoliating treatment (DB Match: ${active})` });
+        } else if (lower.includes("niacinamide")) {
+          pmSteps.push({ name: `🌙 Niacinamide Barrier Serum (DB Match: ${active})` });
+        } else if (lower.includes("cica") || lower.includes("centella") || lower.includes("azelaic")) {
+          pmSteps.push({ name: `🌙 Soothing Skin Treatment (DB Match: ${active})` });
+        }
+      });
+
+      // PM Nourish
+      const hasCeramides = safeActives.some((a) => a.toLowerCase().includes("ceramide"));
+      if (hasCeramides || resolvedType === "Dry") {
+        pmSteps.push({ name: "🌙 Intensive Ceramide Night Recovery Cream" });
+      } else {
+        pmSteps.push({ name: "🌙 Soothing Night Moisturiser" });
+      }
+
+      setDynamicRoutine({ AM: amSteps, PM: pmSteps });
+      setHasGenerated(true);
+    } catch (err) {
+      console.error("Error generating routine from database:", err);
+      alert("Error querying database: " + err.message);
+    }
+  }
+
+  async function applyCustomRoutine() {
+    if (!user || !dynamicRoutine) return;
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const newAM = dynamicRoutine.AM.map(item => ({
+        id: crypto.randomUUID(),
+        name: item.name,
+        completed: false
+      }));
+      const newPM = dynamicRoutine.PM.map(item => ({
+        id: crypto.randomUUID(),
+        name: item.name,
+        completed: false
+      }));
+
+      setRoutineAM(newAM);
+      setRoutinePM(newPM);
+      await updateDoc(userDocRef, {
+        routineAM: newAM,
+        routinePM: newPM
+      });
+      alert("Successfully loaded custom generated routine steps!");
+    } catch (err) {
+      console.error("Error saving routine:", err);
+    }
+  }
+
+  return (
+    <div className="routine-suggestor-card">
+      <h4 style={{ marginBottom: "6px" }}>Skin Profile Routine Suggestor</h4>
+      <p style={{ fontSize: "12px", color: "#666", marginBottom: "14px" }}>
+        Generating suggestions using your profile: <strong>{skinType || "Normal"} Skin</strong>
+        {skinConcerns ? `, concern: <strong>${skinConcerns}</strong>` : ""}
+        {age ? `, age: <strong>${age}</strong>` : ""}.
+      </p>
+
+      <button type="button" className="auth-submit" style={{ minHeight: "36px", marginBottom: "16px" }} onClick={handleGenerate}>
+        Generate Suggested Routine from Profile
+      </button>
+
+      {/* 2. SUGGESTED INGREDIENTS */}
+      {hasGenerated && (
+        <div className="suggested-actives-bar" style={{ marginBottom: "16px" }}>
+          <strong>Suggested Ingredients for Profile:</strong>
+          <div className="actives-list-wrapper" style={{ marginTop: "6px" }}>
+            {suggestedActives.map(active => (
+              <span key={active} className="active-item-badge">{active}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. CONFLICT CHECK RESULTS */}
+      {hasGenerated && activeConflicts.length > 0 && (
+        <div className="conflicts-output-list" style={{ marginBottom: "16px" }}>
+          {activeConflicts.map((conflict, idx) => (
+            <div key={idx} className={`conflict-banner-row ${conflict.severity.replace(" ", "-").toLowerCase()}`}>
+              <div className="conflict-badge">{conflict.severity}</div>
+              <div className="conflict-actives-involved">
+                <strong>{conflict.actives.join(" + ")}</strong>
+              </div>
+              <p className="conflict-reason-text">{conflict.reason}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 4. GENERATED AM/PM STEPS */}
+      {hasGenerated && dynamicRoutine && (
+        <div className="suggested-splits-container" style={{ borderTop: "1px solid #edf4f0", paddingTop: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gridColumn: "1 / -1", alignItems: "center", marginBottom: "10px" }}>
+            <h5 style={{ margin: 0, fontSize: "13px" }}>Custom Recommended Steps</h5>
+            <button type="button" className="apply-routine-btn" style={{ padding: "6px 12px", fontSize: "11px" }} onClick={applyCustomRoutine}>
+              Load Routine Steps
+            </button>
+          </div>
+          <div className="suggested-split-col">
+            <h5>☀️ AM Steps</h5>
+            <ul>
+              {dynamicRoutine.AM.map((item, idx) => (
+                <li key={idx}>{item.name}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="suggested-split-col">
+            <h5>🌙 PM Steps</h5>
+            <ul>
+              {dynamicRoutine.PM.map((item, idx) => (
+                <li key={idx}>{item.name}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 createRoot(document.getElementById("root")).render(<App />);

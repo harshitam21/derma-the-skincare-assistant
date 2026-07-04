@@ -1,306 +1,106 @@
-# Derma: The Skincare Assistant
+# 🧴 AI-Powered Skincare Assistant & Safety Analyzer
 
-A conversational skincare assistant that recommends products from a curated dataset. It uses a React chat UI, a FastAPI backend, Pinecone vector search, and Google's Gemini API for both retrieval embeddings and natural-language answers.
+A professional, full-stack AI skincare consultation web application. It features a profile-driven routine generator using real clinical datasets, a real-time chemical active conflict checker, a banned/toxic ingredient safety analyzer based on global standards, and an interactive RAG-powered chatbot.
 
-Production app: https://derma-the-skincare-assistant.vercel.app
+[![Vercel Deployment](https://img.shields.io/badge/deploy-vercel-blueviolet)](https://deployment-six-xi.vercel.app)
+[![FastAPI Backend](https://img.shields.io/badge/backend-FastAPI-009688)](https://fastapi.tiangolo.com)
+[![React Frontend](https://img.shields.io/badge/frontend-React-61dafb)](https://react.dev)
+[![Gemini 2.5](https://img.shields.io/badge/model-Gemini--2.5-orange)](https://deepmind.google/technologies/gemini/)
 
-<img width="1106" height="842" alt="Skincare Assistant chat UI" src="https://github.com/user-attachments/assets/247c70f4-8747-4ace-ae90-cb3329fe3fc6" />
+---
 
-## Overview
+## 🌟 Key Features
 
-The assistant uses a curated skincare product dataset to answer product discovery questions. It keeps conversation context across turns, so follow-up prompts such as "under 10 pounds" or "show cheaper options" stay connected to the previous skincare request.
+### 1. 📋 Skin Profile Routine Suggestor
+* **One-Click Generation:** Generates routines directly from your onboarded Skin Profile (Skin Type, Condition/Disease, and Age).
+* **Database-Driven Recommendations:** Queries a raw clinical dataset (`Skincare Treatment Dataset.csv`) to fetch clinically backed ingredients suited to your parameters.
+* **Safety Integration:** Automatically parses recommended actives to verify they don't conflict with each other or your age group before generating.
 
-## Features
+### 2. 🧪 Active Ingredient Conflict Checker
+* Detects hazardous pairing conflicts in real-time (e.g., *Retinoids + Salicylic Acid*, *Vitamin C + AHAs*).
+* Returns severity categories (High Danger, Moderate Danger) along with chemical explanations and spacing recommendations.
 
-- React + Vite chat interface with local chat history
-- FastAPI API served through Vercel serverless functions
-- Pinecone-backed semantic product retrieval
-- Gemini embeddings for query and document vectors
-- Gemini chat responses with retrieved product context
-- Per-session conversation memory for follow-up questions
-- Reset endpoint to clear server-side chat memory
+### 3. ⚠️ 15 Toxic/Harmful Skincare Watch-list
+* Cross-references ingredients against a database of 15 globally restricted/banned chemicals highlighted in the Parama Naturals skincare watch-list (including formaldehyde-releasers, phthalates, sulfates, parabens, synthetic fragrances, and silicones).
+* Instantly flags any matching compounds in your pasted ingredient list.
 
-## Architecture
+### 4. 💬 RAG Skincare Chatbot
+* Powered by Google Gemini.
+* Grounded in Pinecone vector search databases containing product catalogs.
+* Enforces strict ingredient safety logic directly in system prompts.
 
-```text
-skincare-assistant/
-|-- api/
-|   `-- index.py                  # Vercel Python entrypoint
-|-- backend/
-|   |-- main.py                   # FastAPI routes
-|   |-- chat/
-|   |   `-- chatbot.py            # Gemini response + conversation memory
-|   |-- retrieval/
-|   |   `-- search.py             # Gemini query embeddings + Pinecone search
-|   `-- embeddings/
-|       `-- embed.py              # Upload document embeddings to Pinecone
-|-- frontend/
-|   `-- src/                      # React app
-|-- data/
-|   |-- raw/                      # Source CSV files
-|   `-- processed/                # documents.json for embedding
-|-- scripts/
-|   `-- build_documents.py
-|-- requirements.txt              # Production Python dependencies
-|-- requirements-dev.txt          # Local data/test tooling
-`-- vercel.json                   # Vercel build and routing config
+---
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    User([User Browser]) -->|HTTPS| Frontend[React + Vite Frontend]
+    Frontend -->|Static Assets| VercelCDN[Vercel Edge CDN]
+    Frontend -->|API Requests| Backend[FastAPI Serverless Functions]
+    Backend -->|Model Queries| Gemini[Google Gemini API]
+    Backend -->|Vector Search| Pinecone[Pinecone Vector DB]
+    Backend -->|DB Query| CSV[(Skincare Treatment Dataset.csv)]
+    Frontend -->|Auth & Sync| Firebase[Firebase Auth & Firestore]
 ```
 
-## How It Works
-
-1. The frontend posts a message to `/api/chat`.
-2. The backend builds a retrieval query, including recent conversation context when needed.
-3. `backend/retrieval/search.py` embeds the query with Gemini and searches Pinecone.
-4. Retrieved documents plus chat history are sent to Gemini for the final answer.
-5. The frontend stores conversations in `localStorage`; the backend keeps short in-memory session history.
-
-## Requirements
-
-- Python 3.12+
-- Node.js and npm
-- Google AI Studio API key
-- Pinecone API key
-- Firebase project with Email/Password Authentication and Firestore enabled
-
-## Environment Variables
-
-Create a `.env` file from the template:
-
-```bash
-cp .env.example .env
-```
-
-Required:
-
-```env
-GEMINI_API_KEY=your_gemini_api_key
-PINECONE_API_KEY=your_pinecone_api_key
-VITE_FIREBASE_API_KEY=your_firebase_api_key
-VITE_FIREBASE_AUTH_DOMAIN=derma-3e199.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=derma-3e199
-VITE_FIREBASE_STORAGE_BUCKET=derma-3e199.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=36719323160
-VITE_FIREBASE_APP_ID=1:36719323160:web:ebc7aee1ab104b9e01fb6d
-VITE_FIREBASE_MEASUREMENT_ID=G-PYTN35TF2H
-```
-
-Common optional values:
-
-```env
-GEMINI_MODEL=gemini-2.5-flash
-GEMINI_FALLBACK_MODEL=gemini-2.5-flash-lite
-GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta
-GEMINI_EMBEDDING_MODEL=gemini-embedding-001
-GEMINI_EMBEDDING_DIMENSIONS=384
-CHAT_MEMORY_TURNS=6
-
-PINECONE_INDEX_NAME=derma-skincare
-PINECONE_NAMESPACE=
-PINECONE_CLOUD=aws
-PINECONE_REGION=us-east-1
-PINECONE_METRIC=cosine
-PINECONE_UPSERT_BATCH_SIZE=100
-```
-
-The Pinecone index dimension must match `GEMINI_EMBEDDING_DIMENSIONS`.
-
-## Firebase Login
-
-The frontend uses Firebase Authentication for email/password login. On signup or login, the app writes a user document to Firestore:
-
-```text
-users/{uid}
-```
-
-Stored fields include:
-
-- `uid`
-- `email`
-- `displayName`
-- `createdAt` for new accounts
-- `lastLoginAt` on every login
-
-Firebase setup:
-
-1. Create a Firebase project.
-2. Add a Web app and copy its config values into the `VITE_FIREBASE_*` environment variables. The current Firebase project ID is `derma-3e199`.
-3. Enable Authentication -> Sign-in method -> Email/Password.
-4. Enable Firestore Database.
-5. Add the same `VITE_FIREBASE_*` values to Vercel and redeploy.
-
-In production, Firebase's `/__/auth/*` helper endpoints are reverse-proxied through the app domain by `vercel.json`. The frontend therefore uses the current production host as `authDomain`; local development continues to use `VITE_FIREBASE_AUTH_DOMAIN`. Add every production and preview hostname to Firebase Authentication -> Settings -> Authorized domains. For OAuth providers, also authorize:
-
-```text
-https://<app-domain>/__/auth/handler
-```
-
-## Local Setup
-
-Install Python dependencies:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-Install frontend dependencies and build:
-
-```bash
-cd frontend
-npm install
-npm run build
-cd ..
-```
-
-Run the FastAPI app:
-
-```bash
-powershell -ExecutionPolicy Bypass -File scripts/dev_backend.ps1
-```
-
-Open:
-
-```text
-http://127.0.0.1:8001
-```
-
-## Development
-
-For local frontend hot reload, run the backend and frontend separately.
-
-Backend:
-
-```bash
-powershell -ExecutionPolicy Bypass -File scripts/dev_backend.ps1
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run dev
-```
-
-Open the local frontend at:
-
-```text
-http://localhost:5173
-```
-
-The Vite app calls same-origin `/api` routes. During local development, Vite proxies `/api` to `http://127.0.0.1:8001`; in production, Vercel routes `/api` to the FastAPI serverless entrypoint.
-
-## Data And Embeddings
-
-If raw data changes, rebuild the processed documents:
-
-```bash
-python -m pip install -r requirements-dev.txt
-python scripts/build_documents.py
-```
-
-Upload fresh document embeddings to Pinecone:
-
-```bash
-python backend/embeddings/embed.py
-```
-
-Run `embed.py` again whenever you change:
-
-- `data/processed/documents.json`
-- `GEMINI_EMBEDDING_MODEL`
-- `GEMINI_EMBEDDING_DIMENSIONS`
-- Pinecone index settings
-
-Large generated files such as local embedding arrays and model caches are ignored and should not be committed.
-
-## API
-
-### `GET /health`
-
-Returns:
-
-```json
-{"status": "ok"}
-```
-
-### `POST /api/chat`
-
-Request:
-
-```json
-{
-  "message": "Suggest products for oily skin",
-  "session_id": "browser-session-id"
-}
-```
-
-Response:
-
-```json
-{
-  "answer": "Here are some options...",
-  "session_id": "browser-session-id"
-}
-```
-
-### `POST /api/reset`
-
-Request:
-
-```json
-{
-  "session_id": "browser-session-id"
-}
-```
-
-Response:
-
-```json
-{
-  "status": "cleared",
-  "session_id": "browser-session-id"
-}
-```
-
-## Vercel Deployment
-
-The project is configured for Vercel with:
-
-- `api/index.py` as the Python serverless entrypoint
-- `vercel.json` routing `/api/*` and `/health` to FastAPI
-- `frontend/dist` as the static output directory
-- `.vercelignore` excluding local caches, logs, and build artifacts
-
-Set the same required environment variables in Vercel Project Settings before deploying.
-
-Deploy:
-
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+* Node.js (v18+)
+* Python (3.9+)
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd deployment
+   ```
+
+2. **Configure Environment Variables:**
+   Create a `.env` file in the root folder:
+   ```env
+   # API Keys
+   GEMINI_API_KEY=your_gemini_api_key
+   PINECONE_API_KEY=your_pinecone_api_key
+   
+   # Pinecone Config
+   PINECONE_INDEX_NAME=derma-skincare
+   PINECONE_NAMESPACE=__default__
+   
+   # Firebase Config (Used by Frontend Vite build)
+   VITE_FIREBASE_API_KEY=your_firebase_api_key
+   VITE_FIREBASE_PROJECT_ID=your_project_id
+   VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+   ```
+
+3. **Install & Run Backend (Locally):**
+   ```bash
+   pip install -r requirements.txt
+   uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload
+   ```
+
+4. **Install & Run Frontend (Locally):**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+---
+
+## ☁️ Deployment
+
+This project is configured for single-command deployments on **Vercel** via monorepo builders configuration.
+
+Deploy to production:
 ```bash
 npx vercel --prod
 ```
 
-## Troubleshooting
-
-### Frontend says "Failed to fetch"
-
-- In production, make sure the deployed frontend is calling same-origin `/api/chat`.
-- In local development, make sure FastAPI is running on `http://127.0.0.1:8001`.
-
-### `GEMINI_API_KEY is not set`
-
-- Add `GEMINI_API_KEY` locally in `.env`.
-- Add it to Vercel environment variables and redeploy.
-
-### Embedding request fails
-
-- Verify `GEMINI_EMBEDDING_MODEL` is available for your API key.
-- The current default is `gemini-embedding-001`.
-
-### Pinecone returns poor matches
-
-- Re-run `python backend/embeddings/embed.py` so stored document vectors match the current Gemini embedding model and dimensions.
-
-### Vercel bundle exceeds Lambda storage
-
-- Keep production dependencies in `requirements.txt` small.
-- Put local-only tooling in `requirements-dev.txt`.
-- Do not commit `data/cache/`, `data/embeddings/`, `frontend/node_modules/`, or `frontend/dist/`.
+### Routing Config (`vercel.json`):
+* `/api/*` and `/health` route to serverless Python functions (`api/index.py`).
+* All other routes serve static built React SPA files from `/assets/` directly from the Edge CDN.

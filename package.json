@@ -1,0 +1,7 @@
+{
+  "name": "skincare-assistant-monorepo",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build"
+  }
+}
