@@ -1,11 +1,7 @@
 #  AI-Powered Skincare Assistant & Safety Analyzer
 
 A professional, full-stack AI skincare consultation web application. It features a profile-driven routine generator using real clinical datasets, a real-time chemical active conflict checker, a banned/toxic ingredient safety analyzer based on global standards, and an interactive RAG-powered chatbot.
-
-[![Vercel Deployment](https://img.shields.io/badge/deploy-vercel-blueviolet)](https://deployment-six-xi.vercel.app)
-[![FastAPI Backend](https://img.shields.io/badge/backend-FastAPI-009688)](https://fastapi.tiangolo.com)
-[![React Frontend](https://img.shields.io/badge/frontend-React-61dafb)](https://react.dev)
-[![Gemini 2.5](https://img.shields.io/badge/model-Gemini--2.5-orange)](https://deepmind.google/technologies/gemini/)
+Vercel: https://deployment-six-xi.vercel.app/
 
 ---
 
@@ -15,6 +11,8 @@ A professional, full-stack AI skincare consultation web application. It features
 * **One-Click Generation:** Generates routines directly from your onboarded Skin Profile (Skin Type, Condition/Disease, and Age).
 * **Database-Driven Recommendations:** Queries a raw clinical dataset (`Skincare Treatment Dataset.csv`) to fetch clinically backed ingredients suited to your parameters.
 * **Safety Integration:** Automatically parses recommended actives to verify they don't conflict with each other or your age group before generating.
+  <img width="1248" height="817" alt="image" src="https://github.com/user-attachments/assets/0a594d43-2fd5-4522-9f7a-5e1902facf06" />
+
 
 ### 2. Active Ingredient Conflict Checker
 * Detects hazardous pairing conflicts in real-time (e.g., *Retinoids + Salicylic Acid*, *Vitamin C + AHAs*).
@@ -28,6 +26,7 @@ A professional, full-stack AI skincare consultation web application. It features
 * Powered by Google Gemini.
 * Grounded in Pinecone vector search databases containing product catalogs.
 * Enforces strict ingredient safety logic directly in system prompts.
+ <img width="1248" height="817" alt="image" src="https://github.com/user-attachments/assets/b8b500d3-f0fc-4232-a6ca-4d9147931275" />
 
 ---
 
